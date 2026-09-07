@@ -1,10 +1,15 @@
 import io
 import os
-from flask import Flask, jsonify, render_template, request, send_file
+import threading
+
+from flask import Flask, jsonify, render_template, request, send_file, send_from_directory
 from PIL import Image, UnidentifiedImageError
 from rembg import new_session, remove
 
-app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Everything is kept in the GitHub repository root so GitHub web upload is simple.
+app = Flask(__name__, template_folder=BASE_DIR, static_folder=None)
 
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "15"))
 MAX_PIXELS = int(os.getenv("MAX_PIXELS", "30000000"))
@@ -13,8 +18,19 @@ MODEL = os.getenv("REMBG_MODEL", "u2net")
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
 Image.MAX_IMAGE_PIXELS = MAX_PIXELS
 
-# Load once and reuse for much faster repeat requests.
-SESSION = new_session(MODEL)
+# Lazy-load and reuse one rembg session. The model itself is pre-downloaded
+# in the Docker image, so the homepage starts quickly and repeat jobs are fast.
+_SESSION = None
+_SESSION_LOCK = threading.Lock()
+
+
+def get_session():
+    global _SESSION
+    if _SESSION is None:
+        with _SESSION_LOCK:
+            if _SESSION is None:
+                _SESSION = new_session(MODEL)
+    return _SESSION
 
 
 @app.get("/")
@@ -24,6 +40,11 @@ def index():
         max_upload_mb=MAX_UPLOAD_MB,
         model=MODEL,
     )
+
+
+@app.get("/style.css")
+def stylesheet():
+    return send_from_directory(BASE_DIR, "style.css", mimetype="text/css", max_age=3600)
 
 
 @app.get("/health")
@@ -42,7 +63,7 @@ def remove_background():
         return jsonify({"error": "The image is empty."}), 400
 
     try:
-        # Validate that the payload is actually an image before inference.
+        # Validate the file before running AI inference.
         with Image.open(io.BytesIO(raw)) as img:
             img.verify()
 
@@ -54,7 +75,7 @@ def remove_background():
         return jsonify({"error": "Unsupported or invalid image file."}), 400
 
     try:
-        output = remove(raw, session=SESSION, force_return_bytes=True)
+        output = remove(raw, session=get_session(), force_return_bytes=True)
         return send_file(
             io.BytesIO(output),
             mimetype="image/png",
