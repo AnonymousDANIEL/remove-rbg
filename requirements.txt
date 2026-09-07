@@ -1,0 +1,4 @@
+Flask>=3.0,<4
+Pillow>=12.1,<13
+rembg[cpu,cli]==2.0.83
+gunicorn>=23,<24
