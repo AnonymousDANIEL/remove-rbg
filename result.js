@@ -30,6 +30,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   function revoke(list) {
     while (list.length) URL.revokeObjectURL(list.pop());
   }
+
   function blobUrl(blob, bucket) {
     const url = URL.createObjectURL(blob);
     bucket.push(url);
@@ -60,10 +61,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     resultStage.style.setProperty('--image-ratio', `${width} / ${height}`);
   }
 
-  function showRecord(record) {
+  function showRecord(record, sequenceNumber = 0) {
     revoke(objectUrls);
     current = record;
     C.setCurrentId(record.id);
+    if (sequenceNumber) C.markDisplayed(sequenceNumber);
+
     const resultUrl = blobUrl(record.resultBlob, objectUrls);
     const originalUrl = record.originalBlob ? blobUrl(record.originalBlob, objectUrls) : record.originalUrl;
 
@@ -117,8 +120,12 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (current?.id === record.id) {
           current = null;
           C.clearCurrentId();
-          resultShell.classList.add('hidden');
-          emptyResult.classList.remove('hidden');
+          const recordsLeft = await C.getAll();
+          if (recordsLeft[0]) showRecord(recordsLeft[0]);
+          else {
+            resultShell.classList.add('hidden');
+            emptyResult.classList.remove('hidden');
+          }
         }
         await renderHistory();
       });
@@ -127,17 +134,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   newImageBtn.addEventListener('click', () => newImageInput.click());
-  newImageInput.addEventListener('change', async () => {
-    const file = newImageInput.files?.[0];
+  newImageInput.addEventListener('change', () => {
+    const files = [...(newImageInput.files || [])].filter(f => f.type.startsWith('image/'));
     newImageInput.value = '';
-    if (!file) return;
-    try {
-      C.setProcessing(true, 'Removing background…');
-      await C.processFileAndOpen(file);
-    } catch (err) {
-      C.setProcessing(false);
-      C.toast(err.message || 'Background removal failed.');
-    }
+    files.forEach(file => C.enqueueFile(file));
   });
 
   $$('.mode-tab').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
@@ -147,6 +147,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (!current) return;
     C.downloadPng(current.resultBlob, current.name || 'removed-background.png');
   });
+
   copyBtn.addEventListener('click', async () => {
     if (!current) return;
     try { await C.copyPng(current.resultBlob); C.toast('Image copied.'); }
@@ -157,7 +158,14 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (!current) return;
     await C.removeRecord(current.id);
     C.clearCurrentId();
-    location.assign('/');
+    const records = await C.getAll();
+    current = records[0] || null;
+    if (current) showRecord(current);
+    else {
+      resultShell.classList.add('hidden');
+      emptyResult.classList.remove('hidden');
+    }
+    await renderHistory();
   });
 
   clearHistoryBtn.addEventListener('click', async () => {
@@ -168,6 +176,26 @@ window.addEventListener('DOMContentLoaded', async () => {
     emptyResult.classList.remove('hidden');
     await renderHistory();
     C.toast('History cleared.');
+  });
+
+  window.addEventListener('removebg:done', async event => {
+    const { job, record } = event.detail || {};
+    if (!record) return;
+    if (C.shouldDisplay(job?.sequence || 0)) showRecord(record, job?.sequence || 0);
+    await renderHistory();
+  });
+
+  window.addEventListener('removebg:error', event => {
+    const error = event.detail?.error;
+    C.toast(error?.message || 'Background removal failed.');
+  });
+
+  window.addEventListener('removebg:select', async event => {
+    const { job, record } = event.detail || {};
+    if (!record) return;
+    showRecord(record, job?.sequence || 0);
+    await renderHistory();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 
   const currentId = C.getCurrentId();

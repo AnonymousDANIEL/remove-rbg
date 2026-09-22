@@ -9,7 +9,6 @@ window.addEventListener('DOMContentLoaded', () => {
   const urlModal = $('#urlModal');
   const urlInput = $('#urlInput');
   const processUrlBtn = $('#processUrlBtn');
-  const processingScreen = $('#processingScreen');
   const quickSamples = $('#quickSamples');
 
   const samples = [
@@ -20,32 +19,13 @@ window.addEventListener('DOMContentLoaded', () => {
     { name: 'shoe.jpg', url: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=86' },
   ];
 
-  function setBusy(busy) {
-    processingScreen.classList.toggle('hidden', !busy);
-    uploadBtn.disabled = busy;
-    pasteBtn.disabled = busy;
-    processUrlBtn.disabled = busy;
+  function runFile(file) {
+    C.enqueueFile(file, { redirect: true });
   }
 
-  async function runFile(file) {
-    try {
-      setBusy(true);
-      await C.processFileAndOpen(file);
-    } catch (err) {
-      setBusy(false);
-      C.toast(err.message || 'Background removal failed.');
-    }
-  }
-
-  async function runUrl(url, name = 'url-image.jpg') {
-    try {
-      setBusy(true);
-      closeUrlModal();
-      await C.processUrlAndOpen(url, name);
-    } catch (err) {
-      setBusy(false);
-      C.toast(err.message || 'Could not process that image.');
-    }
+  function runUrl(url, name = 'url-image.jpg') {
+    closeUrlModal();
+    C.enqueueUrl(url, name, { redirect: true });
   }
 
   function openUrlModal() {
@@ -65,7 +45,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   uploadBtn.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => {
-    if (fileInput.files?.[0]) runFile(fileInput.files[0]);
+    [...(fileInput.files || [])].filter(f => f.type.startsWith('image/')).forEach(runFile);
     fileInput.value = '';
   });
 
@@ -78,8 +58,8 @@ window.addEventListener('DOMContentLoaded', () => {
     dropZone.classList.remove('dragging');
   }));
   dropZone.addEventListener('drop', e => {
-    const file = [...(e.dataTransfer?.files || [])].find(f => f.type.startsWith('image/'));
-    if (file) runFile(file); else C.toast('Drop an image file here.');
+    const files = [...(e.dataTransfer?.files || [])].filter(f => f.type.startsWith('image/'));
+    if (files.length) files.forEach(runFile); else C.toast('Drop an image file here.');
   });
 
   pasteBtn.addEventListener('click', async () => {

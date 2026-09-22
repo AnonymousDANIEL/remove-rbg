@@ -3,7 +3,6 @@ window.addEventListener('DOMContentLoaded', () => {
   const $ = C.$;
   const $$ = C.$$;
   const grid = $('#sampleGrid');
-  const processing = $('#processingScreen');
   let activeFilter = 'all';
 
   const samples = [
@@ -20,14 +19,8 @@ window.addEventListener('DOMContentLoaded', () => {
     { id: 'backpack', category: 'products', url: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=1000&q=86' },
   ];
 
-  async function processSample(sample) {
-    try {
-      processing.classList.remove('hidden');
-      await C.processUrlAndOpen(sample.url, `${sample.id}.jpg`);
-    } catch (err) {
-      processing.classList.add('hidden');
-      C.toast(err.message || 'Sample could not be processed.');
-    }
+  function processSample(sample) {
+    C.enqueueUrl(sample.url, `${sample.id}.jpg`, { redirect: true });
   }
 
   function render() {

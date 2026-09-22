@@ -1,5 +1,5 @@
 Flask>=3.1,<4
 Pillow>=12.1,<13
 requests>=2.32,<3
-rembg[cpu]==2.0.83
+rembg[cpu]==2.0.85
 gunicorn>=23,<24

@@ -1,10 +1,18 @@
 const Core = (() => {
   const DB_NAME = 'remove-bg-local';
-  const DB_VERSION = 4;
+  const DB_VERSION = 5;
   const HISTORY_STORE = 'history';
-  const MAX_HISTORY = 24;
+  const MAX_HISTORY = 30;
+  const MAX_DOCK_ITEMS = 9;
   let dbPromise = null;
   let toastTimer = null;
+  let queueRunning = false;
+  let redirectWhenIdle = false;
+  let redirectReady = false;
+  let lastDisplayedSequence = 0;
+  let sequence = 0;
+  const queue = [];
+  const jobs = new Map();
 
   function $(s, root = document) { return root.querySelector(s); }
   function $$(s, root = document) { return [...root.querySelectorAll(s)]; }
@@ -15,7 +23,7 @@ const Core = (() => {
     el.textContent = message;
     el.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
   }
 
   function openDb() {
@@ -95,11 +103,7 @@ const Core = (() => {
   }
 
   async function saveResult(record) {
-    const saved = {
-      ...record,
-      id: createId(),
-      createdAt: Date.now(),
-    };
+    const saved = { ...record, id: createId(), createdAt: Date.now() };
     await put(saved);
     await trimHistory();
     localStorage.setItem('remove-bg-current-id', saved.id);
@@ -137,21 +141,15 @@ const Core = (() => {
     return response.blob();
   }
 
-  async function processFileAndOpen(file) {
+  async function processFile(file) {
     if (!file || !file.type?.startsWith('image/')) throw new Error('Please choose an image file.');
     const resultBlob = await removeFile(file);
-    await saveResult({
-      originalBlob: file,
-      resultBlob,
-      name: file.name || 'pasted-image.png',
-    });
-    location.assign('/result');
+    return saveResult({ originalBlob: file, resultBlob, name: file.name || 'pasted-image.png' });
   }
 
-  async function processUrlAndOpen(url, name = 'url-image.jpg') {
+  async function processUrl(url, name = 'url-image.jpg') {
     const resultBlob = await removeUrl(url);
-    await saveResult({ originalUrl: url, resultBlob, name });
-    location.assign('/result');
+    return saveResult({ originalUrl: url, resultBlob, name });
   }
 
   async function copyPng(blob) {
@@ -190,15 +188,15 @@ const Core = (() => {
 
   function fileFromClipboardData(data) {
     if (!data) return null;
-
-    // Most reliable path for Ctrl+V / Copy Image / screenshots.
     for (const item of [...(data.items || [])]) {
       if (item.kind === 'file' && item.type?.startsWith('image/')) {
         const blob = item.getAsFile();
-        if (blob) return new File([blob], `pasted-${Date.now()}.${(blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: blob.type || 'image/png' });
+        if (blob) {
+          const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+          return new File([blob], `pasted-${Date.now()}.${ext}`, { type: blob.type || 'image/png' });
+        }
       }
     }
-
     for (const file of [...(data.files || [])]) {
       if (file.type?.startsWith('image/')) return file;
     }
@@ -207,7 +205,6 @@ const Core = (() => {
 
   function urlFromClipboardData(data) {
     if (!data) return null;
-
     const html = data.getData?.('text/html') || '';
     if (html) {
       try {
@@ -220,10 +217,8 @@ const Core = (() => {
         if (isHttpUrl(src)) return { url: src };
       } catch { /* ignore malformed clipboard html */ }
     }
-
     const uriList = (data.getData?.('text/uri-list') || '').split(/\r?\n/).find(v => v && !v.startsWith('#')) || '';
     if (isHttpUrl(uriList)) return { url: uriList.trim() };
-
     const text = (data.getData?.('text/plain') || '').trim();
     if (text.startsWith('data:image/')) {
       const file = dataUrlToFile(text);
@@ -233,81 +228,209 @@ const Core = (() => {
     return null;
   }
 
-  async function payloadFromPasteEvent(event) {
+  function payloadFromPasteEvent(event) {
     const file = fileFromClipboardData(event.clipboardData);
     if (file) return { file };
     return urlFromClipboardData(event.clipboardData);
   }
 
   async function readClipboardImage() {
-    if (navigator.clipboard?.read) {
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        const type = item.types.find(t => t.startsWith('image/'));
-        if (type) {
-          const blob = await item.getType(type);
-          return new File([blob], `pasted-${Date.now()}.${(blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: blob.type || 'image/png' });
-        }
+    if (!navigator.clipboard?.read) throw new Error('Press Ctrl+V to paste the copied image.');
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      const type = item.types.find(t => t.startsWith('image/'));
+      if (type) {
+        const blob = await item.getType(type);
+        const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+        return new File([blob], `pasted-${Date.now()}.${ext}`, { type: blob.type || 'image/png' });
       }
-      for (const item of items) {
-        if (item.types.includes('text/plain')) {
-          const text = await (await item.getType('text/plain')).text();
-          if (isHttpUrl(text)) return { url: text.trim() };
-        }
-      }
-      throw new Error('No image found in clipboard.');
     }
-    throw new Error('Press Ctrl+V to paste the copied image.');
+    for (const item of items) {
+      if (item.types.includes('text/plain')) {
+        const text = await (await item.getType('text/plain')).text();
+        if (isHttpUrl(text)) return { url: text.trim() };
+      }
+    }
+    throw new Error('No image found in clipboard.');
   }
 
-  function ensureProcessingScreen() {
-    let screen = $('#processingScreen');
-    if (screen) return screen;
-    screen = document.createElement('div');
-    screen.id = 'processingScreen';
-    screen.className = 'processing-screen hidden';
-    screen.setAttribute('aria-live', 'polite');
-    screen.innerHTML = '<div class="processing-card"><div class="spinner"></div><strong>Removing background…</strong><span>Processing the newest image.</span></div>';
-    document.body.appendChild(screen);
-    return screen;
+  function ensureDock() {
+    let dock = $('#jobDock');
+    if (dock) return dock;
+    dock = document.createElement('div');
+    dock.id = 'jobDock';
+    dock.className = 'job-dock';
+    dock.innerHTML = `
+      <input id="globalFileInput" type="file" accept="image/*" multiple hidden>
+      <button class="job-add" id="jobAddBtn" type="button" title="Add image">+</button>
+      <div class="job-strip" id="jobStrip"></div>`;
+    document.body.appendChild(dock);
+    $('#jobAddBtn', dock).addEventListener('click', () => $('#globalFileInput', dock).click());
+    $('#globalFileInput', dock).addEventListener('change', e => {
+      const files = [...(e.target.files || [])].filter(f => f.type.startsWith('image/'));
+      e.target.value = '';
+      files.forEach(file => enqueueFile(file, { redirect: location.pathname !== '/result' }));
+    });
+    return dock;
   }
 
-  function setProcessing(busy, message = 'Removing background…') {
-    const screen = ensureProcessingScreen();
-    const strong = $('strong', screen);
-    if (strong) strong.textContent = message;
-    screen.classList.toggle('hidden', !busy);
+  function trimDock() {
+    const strip = $('#jobStrip');
+    if (!strip) return;
+    while (strip.children.length > MAX_DOCK_ITEMS) {
+      const first = strip.firstElementChild;
+      const id = first?.dataset?.jobId;
+      if (id) {
+        const job = jobs.get(id);
+        if (job?.previewUrl) URL.revokeObjectURL(job.previewUrl);
+        jobs.delete(id);
+      }
+      first?.remove();
+    }
   }
 
-  let globalPasteBusy = false;
-  async function handleGlobalPaste(event) {
-    if (globalPasteBusy) return;
+  function addJobCard(job) {
+    ensureDock();
+    const strip = $('#jobStrip');
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'job-item queued';
+    card.dataset.jobId = job.id;
+    card.title = job.name || 'Queued image';
+    const preview = job.file ? URL.createObjectURL(job.file) : job.url;
+    job.previewUrl = job.file ? preview : null;
+    card.innerHTML = `<img src="${preview}" alt="Queued image"><span class="job-state"><span class="mini-spinner"></span></span>`;
+    card.addEventListener('click', () => {
+      if (!job.record) return;
+      setCurrentId(job.record.id);
+      if (location.pathname === '/result') emit('removebg:select', { job, record: job.record });
+      else location.assign('/result');
+    });
+    strip.appendChild(card);
+    strip.scrollLeft = strip.scrollWidth;
+    trimDock();
+    return card;
+  }
+
+  function updateJobCard(job, status) {
+    const card = document.querySelector(`[data-job-id="${CSS.escape(job.id)}"]`);
+    if (!card) return;
+    card.classList.remove('queued', 'processing', 'done', 'failed');
+    card.classList.add(status);
+    const state = $('.job-state', card);
+    if (!state) return;
+    if (status === 'processing') state.innerHTML = '<span class="mini-spinner"></span>';
+    else if (status === 'done') state.innerHTML = '✓';
+    else if (status === 'failed') state.innerHTML = '!';
+    else state.innerHTML = '<span class="mini-spinner"></span>';
+  }
+
+  function emit(name, detail) {
+    window.dispatchEvent(new CustomEvent(name, { detail }));
+  }
+
+  function queueJob(job) {
+    jobs.set(job.id, job);
+    queue.push(job);
+    addJobCard(job);
+    emit('removebg:queued', { job });
+    pumpQueue();
+    return job.id;
+  }
+
+  function enqueueFile(file, options = {}) {
+    if (!file || !file.type?.startsWith('image/')) {
+      toast('Please choose an image file.');
+      return null;
+    }
+    if (options.redirect) redirectWhenIdle = true;
+    const job = {
+      id: `job-${Date.now()}-${++sequence}`,
+      sequence,
+      type: 'file',
+      file,
+      name: file.name || `pasted-${Date.now()}.png`,
+    };
+    return queueJob(job);
+  }
+
+  function enqueueUrl(url, name = 'url-image.jpg', options = {}) {
+    if (!isHttpUrl(url)) {
+      toast('Please use a valid image URL.');
+      return null;
+    }
+    if (options.redirect) redirectWhenIdle = true;
+    const job = {
+      id: `job-${Date.now()}-${++sequence}`,
+      sequence,
+      type: 'url',
+      url,
+      name,
+    };
+    return queueJob(job);
+  }
+
+  async function pumpQueue() {
+    if (queueRunning) return;
+    queueRunning = true;
+    while (queue.length) {
+      const job = queue.shift();
+      updateJobCard(job, 'processing');
+      emit('removebg:processing', { job });
+      try {
+        const record = job.type === 'file'
+          ? await processFile(job.file)
+          : await processUrl(job.url, job.name);
+        job.record = record;
+        redirectReady = true;
+        updateJobCard(job, 'done');
+        emit('removebg:done', { job, record });
+      } catch (error) {
+        job.error = error;
+        updateJobCard(job, 'failed');
+        emit('removebg:error', { job, error });
+        toast(error.message || 'Background removal failed.');
+      }
+    }
+    queueRunning = false;
+    if (redirectWhenIdle && redirectReady && location.pathname !== '/result') {
+      redirectWhenIdle = false;
+      redirectReady = false;
+      location.assign('/result');
+    } else if (!queue.length && !queueRunning) {
+      redirectWhenIdle = false;
+      redirectReady = false;
+    }
+  }
+
+  function handleGlobalPaste(event) {
     const activeTag = document.activeElement?.tagName;
-    let payload = await payloadFromPasteEvent(event);
-
-    // Let ordinary text fields receive normal text paste. Image paste is always handled.
+    const payload = payloadFromPasteEvent(event);
     if (!payload?.file && ['INPUT', 'TEXTAREA'].includes(activeTag)) return;
     if (!payload) return;
-
     event.preventDefault();
     event.stopPropagation();
-    globalPasteBusy = true;
-    setProcessing(true, 'Removing background…');
-    try {
-      if (payload.file) await processFileAndOpen(payload.file);
-      else if (payload.url) await processUrlAndOpen(payload.url, 'pasted-image.jpg');
-    } catch (err) {
-      setProcessing(false);
-      toast(err.message || 'Could not paste that image.');
-      globalPasteBusy = false;
-    }
+    if (payload.file) enqueueFile(payload.file, { redirect: location.pathname !== '/result' });
+    else if (payload.url) enqueueUrl(payload.url, 'pasted-image.jpg', { redirect: location.pathname !== '/result' });
   }
 
   function installGlobalPaste() {
-    // Capture phase means Ctrl+V works on Home, Result and Samples before any page widget can swallow it.
+    ensureDock();
     document.addEventListener('paste', handleGlobalPaste, true);
   }
 
+  function openFilePicker() {
+    ensureDock();
+    $('#globalFileInput')?.click();
+  }
+
+  function markDisplayed(sequenceNumber) {
+    lastDisplayedSequence = Math.max(lastDisplayedSequence, sequenceNumber || 0);
+  }
+
+  function shouldDisplay(sequenceNumber) {
+    return (sequenceNumber || 0) >= lastDisplayedSequence;
+  }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', installGlobalPaste, { once: true });
@@ -318,8 +441,9 @@ const Core = (() => {
   return {
     $, $$, toast, get, getAll, removeRecord, clearHistory,
     saveResult, setCurrentId, getCurrentId, clearCurrentId,
-    processFileAndOpen, processUrlAndOpen, copyPng, downloadPng, readClipboardImage,
-    payloadFromPasteEvent, setProcessing,
+    processFile, processUrl, copyPng, downloadPng, readClipboardImage,
+    payloadFromPasteEvent, enqueueFile, enqueueUrl, openFilePicker,
+    markDisplayed, shouldDisplay,
   };
 })();
 window.RemoveBGCore = Core;

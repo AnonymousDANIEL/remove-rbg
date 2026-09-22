@@ -10,7 +10,7 @@
 <body class="home-page">
   <header class="topbar">
     <a class="brand" href="/" aria-label="Remove BG home"><span class="brand-mark"></span><span>remove bg</span></a>
-    <nav class="topnav"><a href="/samples">Samples</a><span class="quality-pill">AI Quality</span></nav>
+    <nav class="topnav"><a href="/samples">Samples</a><span class="quality-pill">HD Quality</span></nav>
   </header>
 
   <main class="home-main">
@@ -23,7 +23,7 @@
 
       <div class="upload-column">
         <div class="upload-card" id="dropZone">
-          <input id="fileInput" type="file" accept="image/*" hidden />
+          <input id="fileInput" type="file" accept="image/*" multiple hidden />
           <button class="upload-button" id="uploadBtn" type="button">Upload Image</button>
           <div class="upload-sub">or drop a file,</div>
           <div class="upload-links">
@@ -52,14 +52,6 @@
       <p>Use a direct public http/https image URL.</p>
       <input id="urlInput" type="url" placeholder="https://example.com/photo.jpg" autocomplete="off" />
       <button class="upload-button full" id="processUrlBtn" type="button">Remove background</button>
-    </div>
-  </div>
-
-  <div class="processing-screen hidden" id="processingScreen" aria-live="polite">
-    <div class="processing-card">
-      <div class="spinner"></div>
-      <strong>Removing background…</strong>
-      <span>AI is processing your image.</span>
     </div>
   </div>
 

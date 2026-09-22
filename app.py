@@ -13,9 +13,9 @@ from rembg import new_session, remove
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, static_folder=None)
 
-MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "20"))
-MAX_PIXELS = int(os.getenv("MAX_PIXELS", "50000000"))
-MODEL = os.getenv("REMBG_MODEL", "birefnet-general-lite")
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "25"))
+MAX_PIXELS = int(os.getenv("MAX_PIXELS", "60000000"))
+MODEL = os.getenv("REMBG_MODEL", "birefnet-general")
 URL_TIMEOUT = int(os.getenv("URL_TIMEOUT", "20"))
 
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
@@ -47,12 +47,23 @@ def _validate_remote_url(url: str) -> str:
     if host.lower() in {"localhost", "localhost.localdomain"}:
         raise ValueError("This URL is not allowed.")
     try:
-        infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+        infos = socket.getaddrinfo(
+            host,
+            parsed.port or (443 if parsed.scheme == "https" else 80),
+            type=socket.SOCK_STREAM,
+        )
     except socket.gaierror as exc:
         raise ValueError("The image host could not be resolved.") from exc
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
             raise ValueError("This URL is not allowed.")
     return url
 
@@ -60,11 +71,17 @@ def _validate_remote_url(url: str) -> str:
 def fetch_remote_image(url: str) -> bytes:
     current = _validate_remote_url(url)
     headers = {
-        "User-Agent": "Mozilla/5.0 RemoveBG-SelfHosted/1.0",
+        "User-Agent": "Mozilla/5.0 RemoveBG-SelfHosted/2.0",
         "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
     }
     for _ in range(4):
-        with requests.get(current, headers=headers, stream=True, timeout=URL_TIMEOUT, allow_redirects=False) as resp:
+        with requests.get(
+            current,
+            headers=headers,
+            stream=True,
+            timeout=URL_TIMEOUT,
+            allow_redirects=False,
+        ) as resp:
             if 300 <= resp.status_code < 400 and resp.headers.get("Location"):
                 current = _validate_remote_url(urljoin(current, resp.headers["Location"]))
                 continue
@@ -93,9 +110,13 @@ def normalize_image(raw: bytes) -> Image.Image:
         with Image.open(io.BytesIO(raw)) as image:
             image = ImageOps.exif_transpose(image)
             if image.width * image.height > MAX_PIXELS:
-                raise ValueError(f"Image is too large. Maximum is {MAX_PIXELS:,} pixels.")
+                raise ValueError(
+                    f"Image is too large. Maximum is {MAX_PIXELS:,} pixels."
+                )
             if image.mode not in ("RGB", "RGBA"):
-                image = image.convert("RGBA" if "transparency" in image.info else "RGB")
+                image = image.convert(
+                    "RGBA" if "transparency" in image.info else "RGB"
+                )
             return image.copy()
     except (UnidentifiedImageError, OSError) as exc:
         raise ValueError("Unsupported or damaged image file.") from exc
@@ -104,10 +125,18 @@ def normalize_image(raw: bytes) -> Image.Image:
 def remove_background(raw: bytes) -> bytes:
     image = normalize_image(raw)
     session = get_session()
+    # One warmed full-quality session. Serial inference avoids CPU/RAM spikes on Railway,
+    # while the browser queue stays fully non-blocking and accepts new pasted images.
     with _infer_lock:
-        output = remove(image, session=session)
+        output = remove(
+            image,
+            session=session,
+            decontaminate=True,
+            post_process_mask=False,
+        )
     out = io.BytesIO()
-    output.save(out, format="PNG", optimize=True)
+    # Low compression is much faster than optimize=True and keeps the RGBA result lossless.
+    output.save(out, format="PNG", optimize=False, compress_level=1)
     return out.getvalue()
 
 
@@ -167,7 +196,13 @@ def api_remove():
         return jsonify({"error": "Please upload or paste an image."}), 400
     try:
         result = remove_background(uploaded.read())
-        return send_file(io.BytesIO(result), mimetype="image/png", as_attachment=False, download_name="removed-background.png", max_age=0)
+        return send_file(
+            io.BytesIO(result),
+            mimetype="image/png",
+            as_attachment=False,
+            download_name="removed-background.png",
+            max_age=0,
+        )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception:
@@ -181,7 +216,13 @@ def api_remove_url():
     try:
         raw = fetch_remote_image(payload.get("url", ""))
         result = remove_background(raw)
-        return send_file(io.BytesIO(result), mimetype="image/png", as_attachment=False, download_name="removed-background.png", max_age=0)
+        return send_file(
+            io.BytesIO(result),
+            mimetype="image/png",
+            as_attachment=False,
+            download_name="removed-background.png",
+            max_age=0,
+        )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except requests.RequestException:
@@ -193,7 +234,17 @@ def api_remove_url():
 
 @app.errorhandler(413)
 def too_large(_):
-    return jsonify({"error": f"Image is too large. Maximum upload is {MAX_UPLOAD_MB} MB."}), 413
+    return jsonify(
+        {"error": f"Image is too large. Maximum upload is {MAX_UPLOAD_MB} MB."}
+    ), 413
+
+
+# Warm the model when the Railway service starts, not when the first customer image arrives.
+# If loading fails, the request path retries lazily and Railway logs the actual reason.
+try:
+    get_session()
+except Exception:
+    app.logger.exception("Model warm-up failed; first request will retry")
 
 
 if __name__ == "__main__":

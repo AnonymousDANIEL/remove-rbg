@@ -1,39 +1,35 @@
-# Remove BG — Railway Final (Global Paste)
+# Remove BG — Railway final build
 
 Self-hosted background remover for GitHub + Railway.
 
-## Main flow
+## What changed in this build
 
-- `/` — upload home
-- `/result` — separate result page
-- `/samples` — separate samples page
+- No full-screen `Removing background...` blocker.
+- Paste with `Ctrl+V` repeatedly while another image is processing.
+- Every new image is added to the bottom queue immediately.
+- Processing happens in order; completed images automatically enter Previous records.
+- On `/result`, the newest completed result replaces the current image without reloading the page.
+- Upload button, drag/drop, clipboard image paste and image URL are supported.
+- Separate pages remain: `/`, `/result`, `/samples`.
+- Default model is full `birefnet-general` rather than the Lite model.
+- Color decontamination is enabled to reduce dark/colored edge halos.
+- PNG output uses fast lossless compression for quicker response.
+- The model is downloaded at Docker build and warmed when the service starts.
 
-## Paste behavior
+## Deploy
 
-Ctrl+V works globally on **every page**, including the result page. Copy a new image from a browser, Windows clipboard, screenshot tool, or another app and press Ctrl+V. The newest image is processed immediately, becomes the current result, and older results stay in Previous records.
+1. Extract this ZIP.
+2. Delete the old files in your GitHub repository.
+3. Upload **all extracted files** to the repository root.
+4. Commit changes.
+5. Railway will redeploy automatically.
+6. No Railway Variables are required for the default setup.
 
-Clipboard handling supports image file clipboard items, PNG/JPG/WebP clipboard data, copied image HTML/URLs, and plain image URLs when pasted outside a text input.
+## Optional Railway variables
 
-## Result page
+- `REMBG_MODEL=birefnet-general` — default, higher quality.
+- `REMBG_MODEL=birefnet-general-lite` — lower memory / faster, but lower quality.
+- `MAX_UPLOAD_MB=25`
+- `MAX_PIXELS=60000000`
 
-- Removed / Original / Compare
-- complete uncropped image display
-- Download PNG
-- Copy image
-- right-click result image
-- Previous records stored locally in IndexedDB
-- New image opens the file picker directly from the result page
-- Ctrl+V processes a new image directly from the result page
-
-## Railway
-
-No variables are required for the default setup. Railway detects the Dockerfile automatically.
-
-Optional variables:
-
-- `REMBG_MODEL=birefnet-general-lite`
-- `MAX_UPLOAD_MB=20`
-- `MAX_PIXELS=50000000`
-- `URL_TIMEOUT=20`
-
-The model is downloaded during Docker build.
+If you override `REMBG_MODEL` in Railway, the Docker image only pre-downloads the default full model. Keep the default unless you specifically need the Lite fallback.
