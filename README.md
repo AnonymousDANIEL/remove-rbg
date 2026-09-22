@@ -65,3 +65,7 @@ README.md
 - Browser history and sample cache are local to that browser/device. Clearing site data removes them.
 - Uploaded images are processed in memory and are not intentionally persisted by this application.
 - Sample photos are loaded from Unsplash for demonstration.
+
+## Result viewer sizing
+
+The result viewer automatically follows the uploaded image's aspect ratio. Portrait images stay compact and centered instead of being stretched into a wide, tall canvas. Removed, Original and Compare modes all use `object-fit: contain`, so the whole image remains visible.

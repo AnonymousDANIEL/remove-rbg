@@ -11,6 +11,7 @@ const urlInput = $('#urlInput');
 const processUrlBtn = $('#processUrlBtn');
 const workSection = $('#workSection');
 const resultStage = $('#resultStage');
+const resultCard = $('#resultCard');
 const processingOverlay = $('#processingOverlay');
 const removedImage = $('#removedImage');
 const originalImage = $('#originalImage');
@@ -208,15 +209,46 @@ function originalSource(record, bucket = mainObjectUrls) {
   return record.originalUrl || '';
 }
 
+function applyResultLayout(width, height) {
+  if (!width || !height) return;
+
+  const ratio = width / height;
+  const desktopMaxHeight = 560;
+  const desktopMaxWidth = 860;
+  const portraitMaxWidth = 460;
+  const squareMaxWidth = 600;
+  let targetWidth;
+
+  if (ratio < 0.85) {
+    targetWidth = Math.min(portraitMaxWidth, desktopMaxHeight * ratio);
+  } else if (ratio <= 1.15) {
+    targetWidth = Math.min(squareMaxWidth, desktopMaxHeight * ratio);
+  } else {
+    targetWidth = Math.min(desktopMaxWidth, desktopMaxHeight * ratio);
+  }
+
+  targetWidth = Math.max(320, Math.round(targetWidth));
+  resultCard.style.setProperty('--result-card-width', `${targetWidth}px`);
+  resultStage.style.setProperty('--result-aspect', `${width} / ${height}`);
+}
+
 function setMainImages(record) {
   revokeAll(mainObjectUrls);
   const resultUrl = blobUrl(record.resultBlob, mainObjectUrls);
   const origUrl = originalSource(record, mainObjectUrls);
+
+  resultCard.style.setProperty('--result-card-width', '720px');
+  resultStage.style.setProperty('--result-aspect', '4 / 3');
+
   removedImage.src = resultUrl;
   compareRemoved.src = resultUrl;
   originalImage.src = origUrl;
   compareOriginal.src = origUrl;
   resultMeta.textContent = record.name || 'removed-background.png';
+
+  const measureImage = new Image();
+  measureImage.onload = () => applyResultLayout(measureImage.naturalWidth, measureImage.naturalHeight);
+  measureImage.src = origUrl || resultUrl;
 }
 
 function openHistoryRecord(record) {

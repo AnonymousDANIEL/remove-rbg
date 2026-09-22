@@ -210,11 +210,14 @@ main { overflow: clip; }
 .primary-action { border: 0; background: var(--blue); color: #fff; }
 
 .result-card {
+  width: min(var(--result-card-width, 720px), 100%);
+  margin-inline: auto;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 24px;
   background: #fff;
   box-shadow: 0 14px 45px rgba(15,23,42,.07);
+  transition: width .18s ease;
 }
 .result-toolbar, .result-actions {
   min-height: 64px;
@@ -230,18 +233,27 @@ main { overflow: clip; }
 .mode-tab { border: 0; background: transparent; color: #64748b; border-radius: 9px; padding: 8px 12px; font-weight: 750; font-size: 13px; }
 .mode-tab.active { background: #fff; color: #0f172a; box-shadow: 0 1px 5px rgba(15,23,42,.12); }
 .result-meta { color: #94a3b8; font-size: 12px; }
-.right-click-tip { margin-left: auto; color: #94a3b8; font-size: 12px; }
 
 .result-stage {
   position: relative;
-  min-height: min(66vh, 680px);
+  width: 100%;
+  aspect-ratio: var(--result-aspect, 4 / 3);
+  min-height: 0;
+  max-height: 580px;
   display: grid;
   place-items: center;
   overflow: hidden;
   background: #f8fafc;
 }
 .single-view, .compare-view { position: absolute; inset: 0; display: grid; place-items: center; }
-.single-view img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.single-view img {
+  width: auto;
+  height: auto;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  object-fit: contain;
+  display: block;
+}
 .result-stage.mode-removed .original-view,
 .result-stage.mode-removed .compare-view,
 .result-stage.mode-original .removed-view,
@@ -259,7 +271,16 @@ main { overflow: clip; }
 }
 .compare-view { background: #f3f4f6; }
 .compare-view > img,
-.compare-after img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.compare-after img {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  width: auto;
+  height: auto;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  object-fit: contain;
+}
 .compare-after {
   position: absolute;
   inset: 0;
@@ -534,8 +555,8 @@ main { overflow: clip; }
   .quick-copy { flex-direction: row; gap: 6px; }
   .work-section, .history-section, .samples-section { width: min(100% - 24px, 1180px); }
   .section-head { align-items: center; }
-  .result-stage { min-height: 56vh; }
-  .right-click-tip { width: 100%; margin-left: 0; }
+  .result-card { width: 100%; }
+  .result-stage { max-height: 72vh; }
   .sample-grid { columns: 2 150px; column-gap: 10px; }
   .sample-card { margin-bottom: 10px; border-radius: 14px; }
   .sample-frame { min-height: 160px; }
