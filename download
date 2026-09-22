@@ -1,7 +1,6 @@
-.git
-.gitignore
-README.md
 __pycache__
 *.pyc
-*.zip
-.DS_Store
+.git
+.gitignore
+.env
+.venv

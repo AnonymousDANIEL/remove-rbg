@@ -1,46 +1,38 @@
 window.addEventListener('DOMContentLoaded', () => {
-  const C = window.RemoveBGCore;
-  const $ = C.$;
-  const $$ = C.$$;
-  const grid = $('#sampleGrid');
-  let activeFilter = 'all';
-
-  const samples = [
-    { id: 'portrait-woman', category: 'people', url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=1000&q=86' },
-    { id: 'portrait-man', category: 'people', url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=1000&q=86' },
-    { id: 'portrait-two', category: 'people', url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=1000&q=86' },
-    { id: 'golden-dog', category: 'animals', url: 'https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&w=1000&q=86' },
-    { id: 'cat', category: 'animals', url: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=1000&q=86' },
-    { id: 'sports-car', category: 'cars', url: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=1200&q=86' },
-    { id: 'watch', category: 'products', url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1000&q=86' },
-    { id: 'shoe', category: 'products', url: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1000&q=86' },
-    { id: 'headphones', category: 'products', url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=1000&q=86' },
-    { id: 'camera', category: 'products', url: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=1000&q=86' },
-    { id: 'backpack', category: 'products', url: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=1000&q=86' },
+  const items = [
+    {cat:'people', name:'Portrait', url:'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=900&q=88'},
+    {cat:'people', name:'Person', url:'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=900&q=88'},
+    {cat:'animals', name:'Dog', url:'https://images.unsplash.com/photo-1552053831-71594a27632d?w=900&q=88'},
+    {cat:'animals', name:'Cat', url:'https://images.unsplash.com/photo-1574158622682-e40e69881006?w=900&q=88'},
+    {cat:'products', name:'Shoe', url:'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=900&q=88'},
+    {cat:'products', name:'Headphones', url:'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=900&q=88'},
+    {cat:'cars', name:'Car', url:'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=900&q=88'},
+    {cat:'cars', name:'Sports car', url:'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=900&q=88'},
   ];
 
-  function processSample(sample) {
-    C.enqueueUrl(sample.url, `${sample.id}.jpg`, { redirect: true });
-  }
+  const grid = Core.$('#sampleGrid');
 
-  function render() {
+  function render(filter='all') {
     grid.innerHTML = '';
-    samples.filter(s => activeFilter === 'all' || s.category === activeFilter).forEach(sample => {
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = 'sample-pick-card';
-      card.innerHTML = `
-        <div class="sample-thumb"><img src="${sample.url}" alt="${sample.category} sample" loading="lazy"></div>
-        <div class="sample-pick-footer"><span>${sample.category}</span><strong>Use sample →</strong></div>`;
-      card.addEventListener('click', () => processSample(sample));
-      grid.appendChild(card);
+    items.filter(x => filter === 'all' || x.cat === filter).forEach(item => {
+      const btn = document.createElement('button');
+      btn.className = 'sample-pick-card';
+      btn.type = 'button';
+      btn.innerHTML = `
+        <div class="sample-thumb"><img src="${item.url}" alt="${item.name}" loading="lazy"></div>
+        <div class="sample-pick-footer"><span>${item.cat}</span><strong>Use sample</strong></div>`;
+      btn.addEventListener('click', async () => {
+        try { await Core.submitUrl(item.url); }
+        catch (err) { Core.toast(err.message); }
+      });
+      grid.appendChild(btn);
     });
   }
 
-  $$('.sample-filter').forEach(btn => btn.addEventListener('click', () => {
-    activeFilter = btn.dataset.filter;
-    $$('.sample-filter').forEach(b => b.classList.toggle('active', b === btn));
-    render();
+  Core.$$('.sample-filter').forEach(btn => btn.addEventListener('click', () => {
+    Core.$$('.sample-filter').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    render(btn.dataset.filter);
   }));
 
   render();

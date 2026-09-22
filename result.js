@@ -1,216 +1,204 @@
 window.addEventListener('DOMContentLoaded', async () => {
-  const C = window.RemoveBGCore;
-  const $ = C.$;
-  const $$ = C.$$;
-  const resultShell = $('#resultShell');
-  const emptyResult = $('#emptyResult');
-  const editorCard = $('#editorCard');
-  const resultStage = $('#resultStage');
-  const removedImage = $('#removedImage');
-  const originalImage = $('#originalImage');
-  const compareOriginal = $('#compareOriginal');
-  const compareRemoved = $('#compareRemoved');
-  const compareAfter = $('#compareAfter');
-  const compareLine = $('#compareLine');
-  const compareRange = $('#compareRange');
-  const resultMeta = $('#resultMeta');
-  const historyRail = $('#historyRail');
-  const historyEmpty = $('#historyEmpty');
-  const clearHistoryBtn = $('#clearHistoryBtn');
-  const downloadBtn = $('#downloadBtn');
-  const copyBtn = $('#copyBtn');
-  const deleteCurrentBtn = $('#deleteCurrentBtn');
-  const newImageBtn = $('#newImageBtn');
-  const newImageInput = $('#newImageInput');
+  const params = new URLSearchParams(location.search);
+  const jobId = params.get('id');
+
+  const removedImage = Core.$('#removedImage');
+  const originalImage = Core.$('#originalImage');
+  const compareOriginal = Core.$('#compareOriginal');
+  const compareRemoved = Core.$('#compareRemoved');
+  const stage = Core.$('#resultStage');
+  const card = Core.$('#editorCard');
+  const resultName = Core.$('#resultName');
+  const historyRail = Core.$('#historyRail');
+  const historyEmpty = Core.$('#historyEmpty');
+  const newFileInput = Core.$('#newFileInput');
 
   let current = null;
   let objectUrls = [];
-  let historyUrls = [];
 
-  function revoke(list) {
-    while (list.length) URL.revokeObjectURL(list.pop());
+  function clearObjectUrls() {
+    objectUrls.forEach(u => URL.revokeObjectURL(u));
+    objectUrls = [];
   }
 
-  function blobUrl(blob, bucket) {
-    const url = URL.createObjectURL(blob);
-    bucket.push(url);
-    return url;
-  }
-
-  function setMode(mode) {
-    resultStage.classList.remove('mode-removed', 'mode-original', 'mode-compare');
-    resultStage.classList.add(`mode-${mode}`);
-    $$('.mode-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
-  }
-
-  function updateCompare(value) {
-    compareAfter.style.clipPath = `inset(0 ${100 - value}% 0 0)`;
-    compareLine.style.left = `${value}%`;
-  }
-
-  function applyLayout(width, height) {
-    if (!width || !height) return;
-    const ratio = width / height;
-    const maxH = Math.min(window.innerHeight * 0.66, 680);
-    let widthPx = maxH * ratio;
-    if (ratio < 0.85) widthPx = Math.min(widthPx, 500);
-    else if (ratio <= 1.15) widthPx = Math.min(widthPx, 650);
-    else widthPx = Math.min(widthPx, 920);
-    widthPx = Math.max(300, widthPx);
-    editorCard.style.setProperty('--editor-width', `${Math.round(widthPx)}px`);
-    resultStage.style.setProperty('--image-ratio', `${width} / ${height}`);
-  }
-
-  function showRecord(record, sequenceNumber = 0) {
-    revoke(objectUrls);
-    current = record;
-    C.setCurrentId(record.id);
-    if (sequenceNumber) C.markDisplayed(sequenceNumber);
-
-    const resultUrl = blobUrl(record.resultBlob, objectUrls);
-    const originalUrl = record.originalBlob ? blobUrl(record.originalBlob, objectUrls) : record.originalUrl;
+  function setBlobImages(record) {
+    clearObjectUrls();
+    const resultUrl = URL.createObjectURL(record.resultBlob);
+    const originalUrl = URL.createObjectURL(record.originalBlob);
+    objectUrls.push(resultUrl, originalUrl);
 
     removedImage.src = resultUrl;
     compareRemoved.src = resultUrl;
-    originalImage.src = originalUrl || resultUrl;
-    compareOriginal.src = originalUrl || resultUrl;
-    resultMeta.textContent = record.name || 'image.png';
-    setMode('removed');
-    updateCompare(50);
-    compareRange.value = 50;
+    originalImage.src = originalUrl;
+    compareOriginal.src = originalUrl;
+    resultName.textContent = record.name || 'image.png';
 
-    const measure = new Image();
-    measure.onload = () => applyLayout(measure.naturalWidth, measure.naturalHeight);
-    measure.src = originalUrl || resultUrl;
+    const probe = new Image();
+    probe.onload = () => {
+      const ratio = probe.naturalWidth / Math.max(1, probe.naturalHeight);
+      stage.style.setProperty('--image-ratio', `${probe.naturalWidth} / ${probe.naturalHeight}`);
+      let width = 600;
+      if (ratio > 1.65) width = 820;
+      else if (ratio < .8) width = 460;
+      else if (ratio < 1.05) width = 520;
+      card.style.setProperty('--editor-width', `${width}px`);
+    };
+    probe.src = originalUrl;
+  }
 
-    resultShell.classList.remove('hidden');
-    emptyResult.classList.add('hidden');
+  async function loadServerJob(id) {
+    const statusRes = await fetch(`/api/jobs/${encodeURIComponent(id)}`, { cache:'no-store' });
+    if (!statusRes.ok) throw new Error(await Core.responseError(statusRes));
+    const job = await statusRes.json();
+
+    if (job.status !== 'done') {
+      location.replace(`/processing?id=${encodeURIComponent(id)}&name=${encodeURIComponent(job.name || 'image.png')}&mode=${encodeURIComponent(job.mode || 'fast')}`);
+      return null;
+    }
+
+    const [resultRes, originalRes] = await Promise.all([
+      fetch(`/api/jobs/${encodeURIComponent(id)}/result`, { cache:'no-store' }),
+      fetch(`/api/jobs/${encodeURIComponent(id)}/original`, { cache:'no-store' }),
+    ]);
+    if (!resultRes.ok) throw new Error(await Core.responseError(resultRes));
+    if (!originalRes.ok) throw new Error(await Core.responseError(originalRes));
+
+    const resultBlob = await resultRes.blob();
+    const rawOriginal = await originalRes.blob();
+    const originalBlob = new Blob([rawOriginal], { type: guessMime(job.name) });
+
+    const existing = (await Core.getAll()).find(r => r.jobId === id);
+    if (existing) {
+      Core.setCurrentRecord(existing.id);
+      return existing;
+    }
+
+    return Core.saveHistory({
+      jobId: id,
+      name: job.name || 'image.png',
+      mode: job.mode || 'fast',
+      originalBlob,
+      resultBlob,
+    });
+  }
+
+  function guessMime(name='') {
+    const n = name.toLowerCase();
+    if (n.endsWith('.jpg') || n.endsWith('.jpeg')) return 'image/jpeg';
+    if (n.endsWith('.webp')) return 'image/webp';
+    if (n.endsWith('.gif')) return 'image/gif';
+    if (n.endsWith('.bmp')) return 'image/bmp';
+    return 'image/png';
+  }
+
+  async function renderCurrent(record) {
+    if (!record) return;
+    current = record;
+    Core.setCurrentRecord(record.id);
+    setBlobImages(record);
+    await renderHistory();
   }
 
   async function renderHistory() {
-    revoke(historyUrls);
-    const records = await C.getAll();
+    const all = await Core.getAll();
     historyRail.innerHTML = '';
-    historyEmpty.classList.toggle('hidden', records.length > 0);
-    clearHistoryBtn.classList.toggle('hidden', records.length === 0);
+    historyEmpty.classList.toggle('hidden', all.length > 0);
+    historyRail.classList.toggle('hidden', all.length === 0);
 
-    for (const record of records) {
-      const resultUrl = blobUrl(record.resultBlob, historyUrls);
-      const card = document.createElement('article');
-      card.className = `history-item${current?.id === record.id ? ' active' : ''}`;
-      card.innerHTML = `
-        <button class="history-open" type="button" title="Open"><img src="${resultUrl}" alt="Previous result"></button>
-        <div class="history-tools">
-          <button type="button" data-copy title="Copy image">⧉</button>
-          <button type="button" data-delete title="Delete">×</button>
-        </div>`;
-      $('.history-open', card).addEventListener('click', () => {
-        showRecord(record);
-        renderHistory();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      });
-      $('[data-copy]', card).addEventListener('click', async e => {
+    for (const record of all) {
+      const wrap = document.createElement('div');
+      wrap.className = 'history-item' + (record.id === current?.id ? ' active' : '');
+
+      const open = document.createElement('button');
+      open.className = 'history-open';
+      open.type = 'button';
+      const url = URL.createObjectURL(record.resultBlob);
+      const img = new Image();
+      img.src = url;
+      img.onload = () => URL.revokeObjectURL(url);
+      open.appendChild(img);
+      open.addEventListener('click', () => renderCurrent(record));
+
+      const tools = document.createElement('div');
+      tools.className = 'history-tools';
+      const copy = document.createElement('button');
+      copy.type = 'button'; copy.title = 'Copy'; copy.textContent = '⧉';
+      copy.addEventListener('click', async e => {
         e.stopPropagation();
-        try { await C.copyPng(record.resultBlob); C.toast('Image copied.'); }
-        catch (err) { C.toast(err.message || 'Could not copy image.'); }
+        try { await Core.copyPng(record.resultBlob); Core.toast('Copied'); }
+        catch (err) { Core.toast(err.message); }
       });
-      $('[data-delete]', card).addEventListener('click', async e => {
+      const del = document.createElement('button');
+      del.type = 'button'; del.title = 'Delete'; del.textContent = '×';
+      del.addEventListener('click', async e => {
         e.stopPropagation();
-        await C.removeRecord(record.id);
-        if (current?.id === record.id) {
-          current = null;
-          C.clearCurrentId();
-          const recordsLeft = await C.getAll();
-          if (recordsLeft[0]) showRecord(recordsLeft[0]);
-          else {
-            resultShell.classList.add('hidden');
-            emptyResult.classList.remove('hidden');
-          }
-        }
-        await renderHistory();
+        await Core.del(record.id);
+        if (record.id === current?.id) {
+          const left = await Core.getAll();
+          if (left[0]) await renderCurrent(left[0]); else location.assign('/');
+        } else await renderHistory();
       });
-      historyRail.appendChild(card);
+      tools.append(copy, del);
+      wrap.append(open, tools);
+      historyRail.appendChild(wrap);
     }
   }
 
-  newImageBtn.addEventListener('click', () => newImageInput.click());
-  newImageInput.addEventListener('change', () => {
-    const files = [...(newImageInput.files || [])].filter(f => f.type.startsWith('image/'));
-    newImageInput.value = '';
-    files.forEach(file => C.enqueueFile(file));
+  Core.$$('.mode-tab').forEach(btn => btn.addEventListener('click', () => {
+    Core.$$('.mode-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    stage.className = `result-stage mode-${btn.dataset.mode}`;
+  }));
+
+  const range = Core.$('#compareRange');
+  range.addEventListener('input', () => {
+    const v = Number(range.value);
+    Core.$('#compareAfter').style.clipPath = `inset(0 ${100-v}% 0 0)`;
+    Core.$('#compareLine').style.left = `${v}%`;
   });
 
-  $$('.mode-tab').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
-  compareRange.addEventListener('input', () => updateCompare(Number(compareRange.value)));
-
-  downloadBtn.addEventListener('click', () => {
-    if (!current) return;
-    C.downloadPng(current.resultBlob, current.name || 'removed-background.png');
+  Core.$('#downloadBtn').addEventListener('click', () => {
+    if (current) Core.downloadPng(current.resultBlob, current.name);
   });
 
-  copyBtn.addEventListener('click', async () => {
+  Core.$('#copyBtn').addEventListener('click', async () => {
     if (!current) return;
-    try { await C.copyPng(current.resultBlob); C.toast('Image copied.'); }
-    catch (err) { C.toast(err.message || 'Could not copy image.'); }
+    try { await Core.copyPng(current.resultBlob); Core.toast('Image copied'); }
+    catch (err) { Core.toast(err.message); }
   });
 
-  deleteCurrentBtn.addEventListener('click', async () => {
-    if (!current) return;
-    await C.removeRecord(current.id);
-    C.clearCurrentId();
-    const records = await C.getAll();
-    current = records[0] || null;
-    if (current) showRecord(current);
-    else {
-      resultShell.classList.add('hidden');
-      emptyResult.classList.remove('hidden');
+  Core.$('#newImageBtn').addEventListener('click', () => newFileInput.click());
+  newFileInput.addEventListener('change', async e => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try { await Core.submitFile(file); } catch (err) { Core.toast(err.message); }
+  });
+
+  Core.$('#deleteBtn').addEventListener('click', async () => {
+    if (current) await Core.del(current.id);
+    const left = await Core.getAll();
+    if (left[0]) await renderCurrent(left[0]); else location.assign('/');
+  });
+
+  Core.$('#clearAllBtn').addEventListener('click', async () => {
+    await Core.clear();
+    location.assign('/');
+  });
+
+  try {
+    let record = null;
+    if (jobId) {
+      try { record = await loadServerJob(jobId); }
+      catch (e) { Core.toast(e.message); }
     }
-    await renderHistory();
-  });
-
-  clearHistoryBtn.addEventListener('click', async () => {
-    await C.clearHistory();
-    current = null;
-    C.clearCurrentId();
-    resultShell.classList.add('hidden');
-    emptyResult.classList.remove('hidden');
-    await renderHistory();
-    C.toast('History cleared.');
-  });
-
-  window.addEventListener('removebg:done', async event => {
-    const { job, record } = event.detail || {};
-    if (!record) return;
-    if (C.shouldDisplay(job?.sequence || 0)) showRecord(record, job?.sequence || 0);
-    await renderHistory();
-  });
-
-  window.addEventListener('removebg:error', event => {
-    const error = event.detail?.error;
-    C.toast(error?.message || 'Background removal failed.');
-  });
-
-  window.addEventListener('removebg:select', async event => {
-    const { job, record } = event.detail || {};
-    if (!record) return;
-    showRecord(record, job?.sequence || 0);
-    await renderHistory();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
-
-  const currentId = C.getCurrentId();
-  if (currentId) current = await C.get(currentId);
-  if (!current) {
-    const records = await C.getAll();
-    current = records[0] || null;
-    if (current) C.setCurrentId(current.id);
+    if (!record) record = await Core.get(Core.currentRecordId());
+    if (!record) record = (await Core.getAll())[0] || null;
+    if (!record) return location.assign('/');
+    await renderCurrent(record);
+  } catch (err) {
+    Core.toast(err.message || 'Could not load result.');
   }
-  if (current) showRecord(current);
-  else {
-    resultShell.classList.add('hidden');
-    emptyResult.classList.remove('hidden');
-  }
-  await renderHistory();
 
-  window.addEventListener('beforeunload', () => { revoke(objectUrls); revoke(historyUrls); });
+  window.addEventListener('beforeunload', clearObjectUrls);
 });

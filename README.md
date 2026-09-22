@@ -1,35 +1,52 @@
-# Remove BG — Railway final build
+# Remove BG — Instant Processing Page / Fast Railway build
 
-Self-hosted background remover for GitHub + Railway.
+This version changes the flow to:
 
-## What changed in this build
+1. Upload / Paste / URL on `/`
+2. The upload is accepted and a job ID is returned immediately
+3. Browser moves to `/processing` while AI inference runs in a background worker
+4. When finished, browser automatically opens `/result`
+5. Result is saved into browser IndexedDB as Previous records
 
-- No full-screen `Removing background...` blocker.
-- Paste with `Ctrl+V` repeatedly while another image is processing.
-- Every new image is added to the bottom queue immediately.
-- Processing happens in order; completed images automatically enter Previous records.
-- On `/result`, the newest completed result replaces the current image without reloading the page.
-- Upload button, drag/drop, clipboard image paste and image URL are supported.
-- Separate pages remain: `/`, `/result`, `/samples`.
-- Default model is full `birefnet-general` rather than the Lite model.
-- Color decontamination is enabled to reduce dark/colored edge halos.
-- PNG output uses fast lossless compression for quicker response.
-- The model is downloaded at Docker build and warmed when the service starts.
+## Why this version feels faster
 
-## Deploy
+The previous build used `birefnet-general` for every image. That is a heavier model on CPU.
 
-1. Extract this ZIP.
-2. Delete the old files in your GitHub repository.
-3. Upload **all extracted files** to the repository root.
-4. Commit changes.
-5. Railway will redeploy automatically.
-6. No Railway Variables are required for the default setup.
+This build defaults to:
+- **Fast**: `birefnet-general-lite`
+- **HD**: `birefnet-general`
 
-## Optional Railway variables
+Fast is pre-downloaded during Docker build and warmed when the app starts.
+HD is optional and can be slower on the first use if the full model is not already cached.
 
-- `REMBG_MODEL=birefnet-general` — default, higher quality.
-- `REMBG_MODEL=birefnet-general-lite` — lower memory / faster, but lower quality.
+## Railway region — important for Malaysia
+
+If your Railway service is currently in **US East**, change it to **Southeast Asia / Singapore**:
+
+Railway service → Settings → Scale / Regions → Southeast Asia (Singapore)
+
+This reduces upload/download latency for Malaysia. It does not make the AI itself magically GPU-fast, but it removes the unnecessary Malaysia → Virginia round trip.
+
+## Upload to GitHub
+
+Extract the ZIP and upload all files to the repository root. Do not upload the ZIP itself.
+
+No Railway Variables are required.
+
+Optional Variables:
+
+- `FAST_MODEL=birefnet-general-lite`
+- `HD_MODEL=birefnet-general`
+- `JOB_WORKERS=1`
 - `MAX_UPLOAD_MB=25`
 - `MAX_PIXELS=60000000`
+- `JOB_TTL_SECONDS=1800`
+- `WARM_MODEL=1`
 
-If you override `REMBG_MODEL` in Railway, the Docker image only pre-downloads the default full model. Keep the default unless you specifically need the Lite fallback.
+For small Railway instances keep `JOB_WORKERS=1` to avoid RAM/CPU spikes.
+
+## Important quality note
+
+remove.bg / Canva runs proprietary commercial models and infrastructure, so a self-hosted CPU `rembg` service cannot guarantee identical pixels or identical speed on every image.
+
+The default Fast mode is intended for quick daily use. Use HD only when the edge quality matters enough to accept longer CPU inference.

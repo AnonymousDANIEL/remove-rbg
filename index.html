@@ -1,62 +1,64 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#ffffff" />
-  <title>Remove BG</title>
-  <link rel="stylesheet" href="/style.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Remove Background</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
-<body class="home-page">
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="Remove BG home"><span class="brand-mark"></span><span>remove bg</span></a>
-    <nav class="topnav"><a href="/samples">Samples</a><span class="quality-pill">HD Quality</span></nav>
-  </header>
-
-  <main class="home-main">
-    <section class="home-hero">
-      <div class="home-copy">
-        <div class="hero-person" aria-hidden="true">✦</div>
-        <h1>Remove Image<br />Background</h1>
-        <p>100% automatically and free to use.</p>
-      </div>
-
-      <div class="upload-column">
-        <div class="upload-card" id="dropZone">
-          <input id="fileInput" type="file" accept="image/*" multiple hidden />
-          <button class="upload-button" id="uploadBtn" type="button">Upload Image</button>
-          <div class="upload-sub">or drop a file,</div>
-          <div class="upload-links">
-            <button class="text-link" id="pasteBtn" type="button">paste image</button>
-            <span>or</span>
-            <button class="text-link" id="urlBtn" type="button">URL</button>
-          </div>
-          <div class="drop-hint" id="dropHint">Drop image here</div>
-        </div>
-
-        <div class="quick-samples-row">
-          <div class="quick-copy"><strong>No image?</strong><span>Try one of these:</span></div>
-          <div class="quick-strip" id="quickSamples"></div>
-          <a class="more-samples" href="/samples">More</a>
-        </div>
-        <p class="privacy-note">Images are processed by your own Railway service and are not intentionally stored on the server.</p>
-      </div>
-    </section>
-  </main>
-
-  <div class="modal hidden" id="urlModal" role="dialog" aria-modal="true" aria-labelledby="urlTitle">
-    <div class="modal-backdrop" data-close-modal></div>
-    <div class="modal-card">
-      <button class="modal-close" type="button" data-close-modal aria-label="Close">×</button>
-      <h3 id="urlTitle">Paste image URL</h3>
-      <p>Use a direct public http/https image URL.</p>
-      <input id="urlInput" type="url" placeholder="https://example.com/photo.jpg" autocomplete="off" />
-      <button class="upload-button full" id="processUrlBtn" type="button">Remove background</button>
-    </div>
+<body>
+<header class="topbar">
+  <a class="brand" href="/"><span class="brand-mark"></span><span>remove bg</span></a>
+  <div class="quality-switch" aria-label="Quality">
+    <button data-quality="fast" type="button">Fast</button>
+    <button data-quality="hd" type="button">HD</button>
   </div>
+</header>
 
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/common.js" defer></script>
-  <script src="/home.js" defer></script>
+<main class="home-main">
+  <section class="home-hero">
+    <div class="home-copy">
+      <div class="spark">✦</div>
+      <h1>Remove<br>Image<br>Background</h1>
+      <p>Fast upload. Separate processing page. Transparent PNG result.</p>
+    </div>
+
+    <div class="upload-column">
+      <div class="upload-card" id="dropZone">
+        <input id="fileInput" type="file" accept="image/*" hidden>
+        <button class="upload-button" id="uploadBtn" type="button">Upload Image</button>
+        <div class="upload-sub">or drop a file,</div>
+        <div class="upload-links">
+          <button class="text-link" id="pasteBtn" type="button">paste image</button>
+          <span>or</span>
+          <button class="text-link" id="urlBtn" type="button">URL</button>
+        </div>
+        <div class="drop-hint">Drop image here</div>
+      </div>
+
+      <div class="quick-samples-row">
+        <div class="quick-copy"><strong>No image?</strong><span>Try one of these:</span></div>
+        <div class="quick-strip" id="quickSamples"></div>
+        <a class="more-samples" href="/samples">More</a>
+      </div>
+      <p class="privacy-note">Images are processed by your Railway service. Results are kept in this browser for recent history.</p>
+    </div>
+  </section>
+</main>
+
+<div class="modal hidden" id="urlModal">
+  <div class="modal-backdrop" data-close-url></div>
+  <div class="modal-card">
+    <button class="modal-close" data-close-url type="button">×</button>
+    <h3>Paste image URL</h3>
+    <p>Paste a direct image URL and it will open the separate processing page immediately.</p>
+    <input id="urlInput" type="url" placeholder="https://example.com/image.jpg">
+    <button class="upload-button full" id="urlGo" type="button">Remove background</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="/common.js" defer></script>
+<script src="/home.js" defer></script>
 </body>
 </html>

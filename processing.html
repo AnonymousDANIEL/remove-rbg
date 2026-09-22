@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Removing background…</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="processing-page">
+<header class="topbar processing-topbar">
+  <a class="brand" href="/"><span class="brand-mark"></span><span>remove bg</span></a>
+  <div class="quality-switch" aria-label="Quality">
+    <button data-quality="fast" type="button">Fast</button>
+    <button data-quality="hd" type="button">HD</button>
+  </div>
+</header>
+
+<main class="processing-main">
+  <section class="processing-panel">
+    <div class="processing-spinner" aria-hidden="true"></div>
+    <h1>Removing background…</h1>
+    <p id="processingText">Processing your image.</p>
+    <div class="processing-meta">
+      <span id="processingName"></span>
+      <span id="processingMode"></span>
+    </div>
+    <p class="processing-paste">You can copy another image and press <strong>Ctrl + V</strong> anytime.</p>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+<script src="/common.js" defer></script>
+<script src="/processing.js" defer></script>
+</body>
+</html>

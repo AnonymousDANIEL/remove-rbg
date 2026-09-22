@@ -1,35 +1,38 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#ffffff" />
-  <title>Sample Images · Remove BG</title>
-  <link rel="stylesheet" href="/style.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sample images</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
-<body class="samples-page">
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="Remove BG home"><span class="brand-mark"></span><span>remove bg</span></a>
-    <nav class="topnav"><a href="/">Upload</a><span class="quality-pill">HD Quality</span></nav>
-  </header>
+<body>
+<header class="topbar">
+  <a class="brand" href="/"><span class="brand-mark"></span><span>remove bg</span></a>
+  <div class="quality-switch" aria-label="Quality">
+    <button data-quality="fast" type="button">Fast</button>
+    <button data-quality="hd" type="button">HD</button>
+  </div>
+</header>
 
-  <main class="samples-main">
-    <section class="samples-head">
-      <p class="eyebrow">SAMPLE IMAGES</p>
-      <h1>Try background removal on a sample</h1>
-      <p>Click any image. It will be processed by your Railway service and then open on the separate result page.</p>
-      <div class="sample-filter-row" id="sampleFilters">
-        <button class="sample-filter active" data-filter="all" type="button">All</button>
-        <button class="sample-filter" data-filter="people" type="button">People</button>
-        <button class="sample-filter" data-filter="animals" type="button">Animals</button>
-        <button class="sample-filter" data-filter="products" type="button">Products</button>
-        <button class="sample-filter" data-filter="cars" type="button">Cars</button>
-      </div>
-    </section>
-    <section class="sample-grid" id="sampleGrid"></section>
-  </main>
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/common.js" defer></script>
-  <script src="/samples.js" defer></script>
+<main class="samples-main">
+  <section class="samples-head">
+    <p class="eyebrow">SAMPLE IMAGES</p>
+    <h1>Try background removal on a sample</h1>
+    <p>Click any sample. It immediately opens the separate processing page, then the result page.</p>
+    <div class="sample-filter-row" id="sampleFilters">
+      <button class="sample-filter active" data-filter="all" type="button">All</button>
+      <button class="sample-filter" data-filter="people" type="button">People</button>
+      <button class="sample-filter" data-filter="animals" type="button">Animals</button>
+      <button class="sample-filter" data-filter="products" type="button">Products</button>
+      <button class="sample-filter" data-filter="cars" type="button">Cars</button>
+    </div>
+  </section>
+  <section class="sample-grid" id="sampleGrid"></section>
+</main>
+
+<div class="toast" id="toast"></div>
+<script src="/common.js" defer></script>
+<script src="/samples.js" defer></script>
 </body>
 </html>
