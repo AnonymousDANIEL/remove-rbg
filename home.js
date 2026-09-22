@@ -84,19 +84,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
   pasteBtn.addEventListener('click', async () => {
     try {
-      const file = await C.readClipboardImage();
-      if (file) runFile(file);
+      const payload = await C.readClipboardImage();
+      if (payload instanceof File) runFile(payload);
+      else if (payload?.url) runUrl(payload.url, 'pasted-image.jpg');
     } catch (err) {
-      C.toast(err.message || 'Press Ctrl+V to paste an image.');
-    }
-  });
-
-  document.addEventListener('paste', e => {
-    if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
-    const file = [...(e.clipboardData?.files || [])].find(f => f.type.startsWith('image/'));
-    if (file) {
-      e.preventDefault();
-      runFile(file);
+      C.toast(err.message || 'Press Ctrl+V to paste the copied image.');
     }
   });
 

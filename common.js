@@ -172,22 +172,154 @@ const Core = (() => {
     setTimeout(() => URL.revokeObjectURL(url), 1500);
   }
 
-  async function readClipboardImage() {
-    if (!navigator.clipboard?.read) throw new Error('Press Ctrl+V to paste an image in this browser.');
-    const items = await navigator.clipboard.read();
-    for (const item of items) {
-      const type = item.types.find(t => t.startsWith('image/'));
-      if (!type) continue;
-      const blob = await item.getType(type);
-      return new File([blob], 'pasted-image.png', { type: blob.type || 'image/png' });
+  function dataUrlToFile(dataUrl, filename = 'pasted-image.png') {
+    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s.exec(dataUrl || '');
+    if (!match) return null;
+    const binary = atob(match[2]);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return new File([bytes], filename, { type: match[1] });
+  }
+
+  function isHttpUrl(value) {
+    try {
+      const u = new URL((value || '').trim());
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch { return false; }
+  }
+
+  function fileFromClipboardData(data) {
+    if (!data) return null;
+
+    // Most reliable path for Ctrl+V / Copy Image / screenshots.
+    for (const item of [...(data.items || [])]) {
+      if (item.kind === 'file' && item.type?.startsWith('image/')) {
+        const blob = item.getAsFile();
+        if (blob) return new File([blob], `pasted-${Date.now()}.${(blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: blob.type || 'image/png' });
+      }
     }
-    throw new Error('No image found in clipboard.');
+
+    for (const file of [...(data.files || [])]) {
+      if (file.type?.startsWith('image/')) return file;
+    }
+    return null;
+  }
+
+  function urlFromClipboardData(data) {
+    if (!data) return null;
+
+    const html = data.getData?.('text/html') || '';
+    if (html) {
+      try {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const src = doc.querySelector('img')?.getAttribute('src') || '';
+        if (src.startsWith('data:image/')) {
+          const file = dataUrlToFile(src);
+          if (file) return { file };
+        }
+        if (isHttpUrl(src)) return { url: src };
+      } catch { /* ignore malformed clipboard html */ }
+    }
+
+    const uriList = (data.getData?.('text/uri-list') || '').split(/\r?\n/).find(v => v && !v.startsWith('#')) || '';
+    if (isHttpUrl(uriList)) return { url: uriList.trim() };
+
+    const text = (data.getData?.('text/plain') || '').trim();
+    if (text.startsWith('data:image/')) {
+      const file = dataUrlToFile(text);
+      if (file) return { file };
+    }
+    if (isHttpUrl(text)) return { url: text };
+    return null;
+  }
+
+  async function payloadFromPasteEvent(event) {
+    const file = fileFromClipboardData(event.clipboardData);
+    if (file) return { file };
+    return urlFromClipboardData(event.clipboardData);
+  }
+
+  async function readClipboardImage() {
+    if (navigator.clipboard?.read) {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const type = item.types.find(t => t.startsWith('image/'));
+        if (type) {
+          const blob = await item.getType(type);
+          return new File([blob], `pasted-${Date.now()}.${(blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: blob.type || 'image/png' });
+        }
+      }
+      for (const item of items) {
+        if (item.types.includes('text/plain')) {
+          const text = await (await item.getType('text/plain')).text();
+          if (isHttpUrl(text)) return { url: text.trim() };
+        }
+      }
+      throw new Error('No image found in clipboard.');
+    }
+    throw new Error('Press Ctrl+V to paste the copied image.');
+  }
+
+  function ensureProcessingScreen() {
+    let screen = $('#processingScreen');
+    if (screen) return screen;
+    screen = document.createElement('div');
+    screen.id = 'processingScreen';
+    screen.className = 'processing-screen hidden';
+    screen.setAttribute('aria-live', 'polite');
+    screen.innerHTML = '<div class="processing-card"><div class="spinner"></div><strong>Removing background…</strong><span>Processing the newest image.</span></div>';
+    document.body.appendChild(screen);
+    return screen;
+  }
+
+  function setProcessing(busy, message = 'Removing background…') {
+    const screen = ensureProcessingScreen();
+    const strong = $('strong', screen);
+    if (strong) strong.textContent = message;
+    screen.classList.toggle('hidden', !busy);
+  }
+
+  let globalPasteBusy = false;
+  async function handleGlobalPaste(event) {
+    if (globalPasteBusy) return;
+    const activeTag = document.activeElement?.tagName;
+    let payload = await payloadFromPasteEvent(event);
+
+    // Let ordinary text fields receive normal text paste. Image paste is always handled.
+    if (!payload?.file && ['INPUT', 'TEXTAREA'].includes(activeTag)) return;
+    if (!payload) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    globalPasteBusy = true;
+    setProcessing(true, 'Removing background…');
+    try {
+      if (payload.file) await processFileAndOpen(payload.file);
+      else if (payload.url) await processUrlAndOpen(payload.url, 'pasted-image.jpg');
+    } catch (err) {
+      setProcessing(false);
+      toast(err.message || 'Could not paste that image.');
+      globalPasteBusy = false;
+    }
+  }
+
+  function installGlobalPaste() {
+    // Capture phase means Ctrl+V works on Home, Result and Samples before any page widget can swallow it.
+    document.addEventListener('paste', handleGlobalPaste, true);
+  }
+
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installGlobalPaste, { once: true });
+  } else {
+    installGlobalPaste();
   }
 
   return {
     $, $$, toast, get, getAll, removeRecord, clearHistory,
     saveResult, setCurrentId, getCurrentId, clearCurrentId,
     processFileAndOpen, processUrlAndOpen, copyPng, downloadPng, readClipboardImage,
+    payloadFromPasteEvent, setProcessing,
   };
 })();
 window.RemoveBGCore = Core;

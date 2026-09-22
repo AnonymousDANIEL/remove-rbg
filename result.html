@@ -19,7 +19,7 @@
         <div><p class="eyebrow">RESULT</p><h1>Your image</h1></div>
         <div class="result-head-actions">
           <button class="secondary-btn" id="deleteCurrentBtn" type="button">Delete</button>
-          <a class="secondary-btn link-btn" href="/">New image</a>
+          <button class="secondary-btn" id="newImageBtn" type="button">New image</button><input id="newImageInput" type="file" accept="image/*" hidden />
         </div>
       </div>
 
@@ -67,6 +67,7 @@
     </section>
   </main>
 
+  <div class="processing-screen hidden" id="processingScreen" aria-live="polite"><div class="processing-card"><div class="spinner"></div><strong>Removing background…</strong><span>Processing the newest image.</span></div></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="/common.js" defer></script>
   <script src="/result.js" defer></script>

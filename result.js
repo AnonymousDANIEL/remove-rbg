@@ -20,6 +20,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   const downloadBtn = $('#downloadBtn');
   const copyBtn = $('#copyBtn');
   const deleteCurrentBtn = $('#deleteCurrentBtn');
+  const newImageBtn = $('#newImageBtn');
+  const newImageInput = $('#newImageInput');
 
   let current = null;
   let objectUrls = [];
@@ -123,6 +125,20 @@ window.addEventListener('DOMContentLoaded', async () => {
       historyRail.appendChild(card);
     }
   }
+
+  newImageBtn.addEventListener('click', () => newImageInput.click());
+  newImageInput.addEventListener('change', async () => {
+    const file = newImageInput.files?.[0];
+    newImageInput.value = '';
+    if (!file) return;
+    try {
+      C.setProcessing(true, 'Removing background…');
+      await C.processFileAndOpen(file);
+    } catch (err) {
+      C.setProcessing(false);
+      C.toast(err.message || 'Background removal failed.');
+    }
+  });
 
   $$('.mode-tab').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
   compareRange.addEventListener('input', () => updateCompare(Number(compareRange.value)));
