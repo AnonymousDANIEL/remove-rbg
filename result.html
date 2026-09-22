@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>Result · Remove BG</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="result-page">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Remove BG home"><span class="brand-mark"></span><span>remove bg</span></a>
+    <div class="topnav"><a href="/samples">Samples</a><span class="quality-pill">AI Quality</span></div>
+  </header>
+
+  <main class="result-main">
+    <section class="result-shell" id="resultShell">
+      <div class="result-title-row">
+        <div><p class="eyebrow">RESULT</p><h1>Your image</h1></div>
+        <div class="result-head-actions">
+          <button class="secondary-btn" id="deleteCurrentBtn" type="button">Delete</button>
+          <a class="secondary-btn link-btn" href="/">New image</a>
+        </div>
+      </div>
+
+      <div class="editor-card" id="editorCard">
+        <div class="result-toolbar">
+          <div class="mode-tabs" role="tablist" aria-label="Image view">
+            <button class="mode-tab active" data-mode="removed" type="button">Removed</button>
+            <button class="mode-tab" data-mode="original" type="button">Original</button>
+            <button class="mode-tab" data-mode="compare" type="button">Compare</button>
+          </div>
+          <span class="result-meta" id="resultMeta"></span>
+        </div>
+
+        <div class="result-stage mode-removed" id="resultStage">
+          <div class="single-view removed-view checkerboard"><img id="removedImage" alt="Background removed result" /></div>
+          <div class="single-view original-view"><img id="originalImage" alt="Original image" /></div>
+          <div class="compare-view" id="compareView">
+            <img id="compareOriginal" class="compare-original" alt="Original comparison" />
+            <div class="compare-after checkerboard" id="compareAfter"><img id="compareRemoved" alt="Removed background comparison" /></div>
+            <div class="compare-line" id="compareLine"><span>↔</span></div>
+            <input class="compare-range" id="compareRange" type="range" min="0" max="100" value="50" aria-label="Compare before and after" />
+          </div>
+        </div>
+
+        <div class="result-actions">
+          <button class="primary-action" id="downloadBtn" type="button">Download PNG</button>
+          <button class="secondary-action" id="copyBtn" type="button">Copy image</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="history-section" id="historySection">
+      <div class="section-head compact-head">
+        <div><p class="eyebrow">RECENT</p><h2>Previous records</h2></div>
+        <button class="text-danger" id="clearHistoryBtn" type="button">Clear all</button>
+      </div>
+      <div class="history-empty" id="historyEmpty">No previous images yet.</div>
+      <div class="history-rail" id="historyRail"></div>
+    </section>
+
+    <section class="empty-result hidden" id="emptyResult">
+      <h2>No result selected</h2>
+      <p>Upload a new image or open one of your previous records.</p>
+      <a class="upload-button link-btn" href="/">Upload Image</a>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/common.js" defer></script>
+  <script src="/result.js" defer></script>
+</body>
+</html>

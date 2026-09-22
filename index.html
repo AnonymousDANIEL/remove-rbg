@@ -7,126 +7,40 @@
   <title>Remove BG</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
-<body>
+<body class="home-page">
   <header class="topbar">
-    <a class="brand" href="#top" aria-label="Remove BG home">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <span>remove bg</span>
-    </a>
-    <div class="top-actions">
-      <span class="quality-pill">AI Quality</span>
-      <button class="icon-btn" id="newImageBtn" type="button" title="New image" aria-label="New image">＋</button>
-    </div>
+    <a class="brand" href="/" aria-label="Remove BG home"><span class="brand-mark"></span><span>remove bg</span></a>
+    <nav class="topnav"><a href="/samples">Samples</a><span class="quality-pill">AI Quality</span></nav>
   </header>
 
-  <main id="top">
-    <section class="hero-section" id="uploaderSection">
-      <div class="hero-copy">
-        <p class="eyebrow">BACKGROUND REMOVER</p>
-        <h1>Remove Image Background</h1>
-        <p>Upload, drop, paste or use an image URL. Background removal starts automatically.</p>
+  <main class="home-main">
+    <section class="home-hero">
+      <div class="home-copy">
+        <div class="hero-person" aria-hidden="true">✦</div>
+        <h1>Remove Image<br />Background</h1>
+        <p>100% automatically and free to use.</p>
       </div>
 
-      <div class="upload-card" id="dropZone">
-        <input id="fileInput" type="file" accept="image/*" hidden />
-        <button class="upload-button" id="uploadBtn" type="button">Upload Image</button>
-        <div class="upload-sub">or drop a file,</div>
-        <div class="upload-links">
-          <button class="text-link" id="pasteBtn" type="button">paste image</button>
-          <span>or</span>
-          <button class="text-link" id="urlBtn" type="button">URL</button>
-        </div>
-        <div class="drop-hint" id="dropHint">Drop image here</div>
-      </div>
-
-      <div class="quick-samples">
-        <div class="quick-copy">
-          <strong>No image?</strong>
-          <span>Try one of these:</span>
-        </div>
-        <div class="quick-strip" id="quickSamples" aria-label="Sample images"></div>
-      </div>
-      <p class="privacy-note">Images are processed by your own Railway service. This build does not intentionally store uploaded files on the server.</p>
-    </section>
-
-    <section class="work-section hidden" id="workSection">
-      <div class="section-head compact-head">
-        <div>
-          <p class="eyebrow">RESULT</p>
-          <h2>Your image</h2>
-        </div>
-        <div class="result-head-actions">
-          <button class="secondary-btn" id="deleteCurrentBtn" type="button">Delete</button>
-          <button class="secondary-btn" id="replaceBtn" type="button">New image</button>
-        </div>
-      </div>
-
-      <div class="result-card" id="resultCard">
-        <div class="result-toolbar">
-          <div class="mode-tabs" role="tablist" aria-label="Image view">
-            <button class="mode-tab active" data-mode="removed" type="button">Removed</button>
-            <button class="mode-tab" data-mode="original" type="button">Original</button>
-            <button class="mode-tab" data-mode="compare" type="button">Compare</button>
+      <div class="upload-column">
+        <div class="upload-card" id="dropZone">
+          <input id="fileInput" type="file" accept="image/*" hidden />
+          <button class="upload-button" id="uploadBtn" type="button">Upload Image</button>
+          <div class="upload-sub">or drop a file,</div>
+          <div class="upload-links">
+            <button class="text-link" id="pasteBtn" type="button">paste image</button>
+            <span>or</span>
+            <button class="text-link" id="urlBtn" type="button">URL</button>
           </div>
-          <span id="resultMeta" class="result-meta"></span>
+          <div class="drop-hint" id="dropHint">Drop image here</div>
         </div>
 
-        <div class="result-stage mode-removed" id="resultStage">
-          <div class="single-view removed-view checkerboard">
-            <img id="removedImage" alt="Background removed result" />
-          </div>
-          <div class="single-view original-view">
-            <img id="originalImage" alt="Original image" />
-          </div>
-          <div class="compare-view" id="compareView">
-            <img id="compareOriginal" class="compare-original" alt="Original comparison" />
-            <div class="compare-after checkerboard" id="compareAfter">
-              <img id="compareRemoved" alt="Removed background comparison" />
-            </div>
-            <div class="compare-line" id="compareLine"><span>↔</span></div>
-            <input class="compare-range" id="compareRange" type="range" min="0" max="100" value="50" aria-label="Compare before and after" />
-          </div>
-          <div class="processing-overlay hidden" id="processingOverlay">
-            <div class="spinner"></div>
-            <strong>Removing background…</strong>
-            <span>The first image can take longer while the AI model warms up.</span>
-          </div>
+        <div class="quick-samples-row">
+          <div class="quick-copy"><strong>No image?</strong><span>Try one of these:</span></div>
+          <div class="quick-strip" id="quickSamples"></div>
+          <a class="more-samples" href="/samples">More</a>
         </div>
-
-        <div class="result-actions">
-          <button class="primary-action" id="downloadBtn" type="button">Download PNG</button>
-          <button class="secondary-action" id="copyBtn" type="button">Copy image</button>
-        </div>
+        <p class="privacy-note">Images are processed by your own Railway service and are not intentionally stored on the server.</p>
       </div>
-    </section>
-
-    <section class="history-section" id="historySection">
-      <div class="section-head compact-head">
-        <div>
-          <p class="eyebrow">RECENT</p>
-          <h2>Previous records</h2>
-        </div>
-        <button class="text-danger" id="clearHistoryBtn" type="button">Clear all</button>
-      </div>
-      <div class="history-empty" id="historyEmpty">Your finished images will appear here.</div>
-      <div class="history-rail" id="historyRail"></div>
-    </section>
-
-    <section class="samples-section" id="samplesSection">
-      <div class="sample-title-block">
-        <p class="eyebrow">SAMPLE RESULTS</p>
-        <h2>See how background removal performs on different images</h2>
-        <p>Scroll through the samples. Each card is processed lazily. Drag the center control to compare before and after, or click a card to use that sample as your own test.</p>
-      </div>
-      <div class="sample-filter-row">
-        <button class="sample-filter active" type="button" data-filter="all">All</button>
-        <button class="sample-filter" type="button" data-filter="people">People</button>
-        <button class="sample-filter" type="button" data-filter="animals">Animals</button>
-        <button class="sample-filter" type="button" data-filter="products">Products</button>
-        <button class="sample-filter" type="button" data-filter="cars">Cars</button>
-      </div>
-      <div class="sample-grid" id="sampleGrid"></div>
-      <p class="sample-credit">Sample photos are loaded from Unsplash for demonstration. Your own uploads stay separate from these samples.</p>
     </section>
   </main>
 
@@ -141,7 +55,16 @@
     </div>
   </div>
 
+  <div class="processing-screen hidden" id="processingScreen" aria-live="polite">
+    <div class="processing-card">
+      <div class="spinner"></div>
+      <strong>Removing background…</strong>
+      <span>AI is processing your image.</span>
+    </div>
+  </div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js" defer></script>
+  <script src="/common.js" defer></script>
+  <script src="/home.js" defer></script>
 </body>
 </html>

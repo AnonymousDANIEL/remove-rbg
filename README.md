@@ -1,71 +1,21 @@
-# Remove BG — GitHub + Railway Final Build
+# Remove BG — Separate Pages Edition
 
-Self-hosted background remover designed for Railway. It supports uploads, drag & drop, clipboard paste, public image URLs, local history, copy/download, right-click saving, and a remove.bg-style sample results gallery with draggable before/after comparison.
+Self-hosted background remover for GitHub + Railway.
 
-## Features
-
-- Upload image
-- Drag & drop
-- Ctrl+V image paste
-- Clipboard button
-- Public image URL input
-- Automatic transparent PNG output
-- Direct right-click on result image
-- Copy PNG to clipboard
-- Download PNG
-- Original / Removed / Compare views
-- Recent results stored locally in IndexedDB (up to 24 items)
-- Delete one / clear all history
-- Sample image strip
-- Full sample gallery with lazy before/after generation
-- Sample results cached in the browser
-- SSRF protection for URL fetching
-- No server-side image history storage
-- `/health` endpoint for Railway
-
-## AI model
-
-Default: `birefnet-general-lite` via rembg. The Dockerfile pre-downloads this model during build so normal requests do not need to download it later.
-
-Optional Railway variable:
-
-```text
-REMBG_MODEL=birefnet-general-lite
-```
-
-You normally do not need to add any variables.
+## Pages
+- `/` — upload / drop / paste / URL + quick samples
+- `/result` — separate result screen with Removed / Original / Compare, Download, Copy and Previous records
+- `/samples` — separate sample image page
 
 ## Deploy
-
-1. Extract the ZIP.
-2. Upload **all files inside the folder** to the root of your GitHub repository. Do not upload the ZIP itself.
-3. Connect that GitHub repository to Railway.
-4. Railway detects the root `Dockerfile` and builds it.
-5. Under Railway Networking, generate a public domain.
-6. Open the domain.
-
-## Files
-
-```text
-app.py
-app.js
-index.html
-style.css
-requirements.txt
-Dockerfile
-railway.toml
-README.md
-.gitignore
-.dockerignore
-```
+1. Unzip this package.
+2. Replace the files in your GitHub repository with all files from this folder.
+3. Commit changes.
+4. Railway will rebuild automatically from the Dockerfile.
+5. No Railway Variables are required for the default setup.
 
 ## Notes
-
-- The first Docker build is larger because the AI model is downloaded into the image.
-- Browser history and sample cache are local to that browser/device. Clearing site data removes them.
-- Uploaded images are processed in memory and are not intentionally persisted by this application.
-- Sample photos are loaded from Unsplash for demonstration.
-
-## Result viewer sizing
-
-The result viewer automatically follows the uploaded image's aspect ratio. Portrait images stay compact and centered instead of being stretched into a wide, tall canvas. Removed, Original and Compare modes all use `object-fit: contain`, so the whole image remains visible.
+- Model: `birefnet-general-lite`
+- Previous records are stored in the browser using IndexedDB, up to 24 recent images.
+- Uploaded images are processed in memory and are not intentionally stored on the Railway server.
+- Direct image URLs are fetched server-side with checks that reject local/private network targets.

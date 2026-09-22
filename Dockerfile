@@ -16,10 +16,9 @@ COPY requirements.txt ./
 RUN python -m pip install --upgrade pip \
     && pip install -r requirements.txt
 
-# Pre-download the default quality model so the first image is faster.
 RUN mkdir -p /models \
     && python -c "from rembg import new_session; new_session('birefnet-general-lite')"
 
-COPY app.py index.html style.css app.js ./
+COPY app.py index.html result.html samples.html style.css common.js home.js result.js samples.js ./
 
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 2 --timeout 180 --access-logfile - --error-logfile - app:app"]
