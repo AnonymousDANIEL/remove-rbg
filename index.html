@@ -2,223 +2,147 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#ffffff" />
-  <title>Remove Background</title>
+  <title>Remove BG</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <main class="page-shell">
-    <section class="hero">
-      <div class="brand-row">
-        <div class="logo-mark" aria-hidden="true">✦</div>
-        <span class="brand-name">Remove Background</span>
-      </div>
-      <h1>Remove image backgrounds<br><span>automatically.</span></h1>
-      <p class="sub">Upload, drag & drop, or paste an image. Your transparent PNG is created automatically.</p>
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="Remove BG home">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>remove bg</span>
+    </a>
+    <div class="top-actions">
+      <span class="quality-pill">AI Quality</span>
+      <button class="icon-btn" id="newImageBtn" type="button" title="New image" aria-label="New image">＋</button>
+    </div>
+  </header>
 
-      <section id="dropZone" class="drop-zone" tabindex="0" aria-label="Upload or paste an image">
+  <main id="top">
+    <section class="hero-section" id="uploaderSection">
+      <div class="hero-copy">
+        <p class="eyebrow">BACKGROUND REMOVER</p>
+        <h1>Remove Image Background</h1>
+        <p>Upload, drop, paste or use an image URL. Background removal starts automatically.</p>
+      </div>
+
+      <div class="upload-card" id="dropZone">
         <input id="fileInput" type="file" accept="image/*" hidden />
-        <div class="drop-icon">↥</div>
-        <h2>Drop an image here</h2>
-        <p>or</p>
-        <button id="uploadBtn" class="primary-btn" type="button">Upload Image</button>
-        <p class="paste-hint">You can also press <kbd>Ctrl</kbd> + <kbd>V</kbd> to paste</p>
-        <p class="limit">Max {{ max_upload_mb }} MB</p>
-      </section>
-    </section>
-
-    <section id="workspace" class="workspace hidden" aria-live="polite">
-      <div class="workspace-head">
-        <div>
-          <span class="eyebrow">RESULT</span>
-          <h2>Background removed</h2>
+        <button class="upload-button" id="uploadBtn" type="button">Upload Image</button>
+        <div class="upload-sub">or drop a file,</div>
+        <div class="upload-links">
+          <button class="text-link" id="pasteBtn" type="button">paste image</button>
+          <span>or</span>
+          <button class="text-link" id="urlBtn" type="button">URL</button>
         </div>
-        <button id="newBtn" class="ghost-btn" type="button">New Image</button>
+        <div class="drop-hint" id="dropHint">Drop image here</div>
       </div>
 
-      <div class="compare-grid">
-        <article class="image-card">
-          <div class="card-label">Original</div>
-          <div class="preview-stage original-stage">
-            <img id="originalPreview" alt="Original preview" />
+      <div class="quick-samples">
+        <div class="quick-copy">
+          <strong>No image?</strong>
+          <span>Try one of these:</span>
+        </div>
+        <div class="quick-strip" id="quickSamples" aria-label="Sample images"></div>
+      </div>
+      <p class="privacy-note">Images are processed by your own Railway service. This build does not intentionally store uploaded files on the server.</p>
+    </section>
+
+    <section class="work-section hidden" id="workSection">
+      <div class="section-head compact-head">
+        <div>
+          <p class="eyebrow">RESULT</p>
+          <h2>Your image</h2>
+        </div>
+        <div class="result-head-actions">
+          <button class="secondary-btn" id="deleteCurrentBtn" type="button">Delete</button>
+          <button class="secondary-btn" id="replaceBtn" type="button">New image</button>
+        </div>
+      </div>
+
+      <div class="result-card">
+        <div class="result-toolbar">
+          <div class="mode-tabs" role="tablist" aria-label="Image view">
+            <button class="mode-tab active" data-mode="removed" type="button">Removed</button>
+            <button class="mode-tab" data-mode="original" type="button">Original</button>
+            <button class="mode-tab" data-mode="compare" type="button">Compare</button>
           </div>
-        </article>
-        <article class="image-card">
-          <div class="card-label">Transparent PNG</div>
-          <div class="preview-stage checkerboard">
-            <div id="processing" class="processing hidden">
-              <div class="spinner"></div>
-              <strong>Removing background…</strong>
-              <span>First request can take a little longer while the model starts.</span>
+          <span id="resultMeta" class="result-meta"></span>
+        </div>
+
+        <div class="result-stage mode-removed" id="resultStage">
+          <div class="single-view removed-view checkerboard">
+            <img id="removedImage" alt="Background removed result" />
+          </div>
+          <div class="single-view original-view">
+            <img id="originalImage" alt="Original image" />
+          </div>
+          <div class="compare-view" id="compareView">
+            <img id="compareOriginal" class="compare-original" alt="Original comparison" />
+            <div class="compare-after checkerboard" id="compareAfter">
+              <img id="compareRemoved" alt="Removed background comparison" />
             </div>
-            <img id="resultPreview" class="hidden" alt="Background removed preview" />
+            <div class="compare-line" id="compareLine"><span>↔</span></div>
+            <input class="compare-range" id="compareRange" type="range" min="0" max="100" value="50" aria-label="Compare before and after" />
           </div>
-        </article>
-      </div>
+          <div class="processing-overlay hidden" id="processingOverlay">
+            <div class="spinner"></div>
+            <strong>Removing background…</strong>
+            <span>The first image can take longer while the AI model warms up.</span>
+          </div>
+        </div>
 
-      <div id="errorBox" class="error-box hidden"></div>
-
-      <div id="actions" class="actions hidden">
-        <button id="downloadBtn" class="primary-btn" type="button">Download PNG</button>
-        <button id="copyBtn" class="secondary-btn" type="button">Copy PNG</button>
+        <div class="result-actions">
+          <button class="primary-action" id="downloadBtn" type="button">Download PNG</button>
+          <button class="secondary-action" id="copyBtn" type="button">Copy image</button>
+          <span class="right-click-tip">Tip: right-click the result for “Save image as…” or “Copy image”.</span>
+        </div>
       </div>
     </section>
 
-    <footer>
-      <span>Private processing on your Railway service.</span>
-      <span>Model: {{ model }}</span>
-    </footer>
+    <section class="history-section" id="historySection">
+      <div class="section-head compact-head">
+        <div>
+          <p class="eyebrow">RECENT</p>
+          <h2>Previous records</h2>
+        </div>
+        <button class="text-danger" id="clearHistoryBtn" type="button">Clear all</button>
+      </div>
+      <div class="history-empty" id="historyEmpty">Your finished images will appear here.</div>
+      <div class="history-rail" id="historyRail"></div>
+    </section>
+
+    <section class="samples-section" id="samplesSection">
+      <div class="sample-title-block">
+        <p class="eyebrow">SAMPLE RESULTS</p>
+        <h2>See how background removal performs on different images</h2>
+        <p>Scroll through the samples. Each card is processed lazily. Drag the center control to compare before and after, or click a card to use that sample as your own test.</p>
+      </div>
+      <div class="sample-filter-row">
+        <button class="sample-filter active" type="button" data-filter="all">All</button>
+        <button class="sample-filter" type="button" data-filter="people">People</button>
+        <button class="sample-filter" type="button" data-filter="animals">Animals</button>
+        <button class="sample-filter" type="button" data-filter="products">Products</button>
+        <button class="sample-filter" type="button" data-filter="cars">Cars</button>
+      </div>
+      <div class="sample-grid" id="sampleGrid"></div>
+      <p class="sample-credit">Sample photos are loaded from Unsplash for demonstration. Your own uploads stay separate from these samples.</p>
+    </section>
   </main>
 
-<script>
-(() => {
-  const dropZone = document.getElementById('dropZone');
-  const fileInput = document.getElementById('fileInput');
-  const uploadBtn = document.getElementById('uploadBtn');
-  const workspace = document.getElementById('workspace');
-  const originalPreview = document.getElementById('originalPreview');
-  const resultPreview = document.getElementById('resultPreview');
-  const processing = document.getElementById('processing');
-  const actions = document.getElementById('actions');
-  const errorBox = document.getElementById('errorBox');
-  const downloadBtn = document.getElementById('downloadBtn');
-  const copyBtn = document.getElementById('copyBtn');
-  const newBtn = document.getElementById('newBtn');
+  <div class="modal hidden" id="urlModal" role="dialog" aria-modal="true" aria-labelledby="urlTitle">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card">
+      <button class="modal-close" type="button" data-close-modal aria-label="Close">×</button>
+      <h3 id="urlTitle">Paste image URL</h3>
+      <p>Use a direct public http/https image URL.</p>
+      <input id="urlInput" type="url" placeholder="https://example.com/photo.jpg" autocomplete="off" />
+      <button class="upload-button full" id="processUrlBtn" type="button">Remove background</button>
+    </div>
+  </div>
 
-  let originalUrl = null;
-  let resultUrl = null;
-  let resultBlob = null;
-
-  const setHidden = (el, hidden) => el.classList.toggle('hidden', hidden);
-
-  function resetUrls() {
-    if (originalUrl) URL.revokeObjectURL(originalUrl);
-    if (resultUrl) URL.revokeObjectURL(resultUrl);
-    originalUrl = null;
-    resultUrl = null;
-    resultBlob = null;
-  }
-
-  function showError(message) {
-    errorBox.textContent = message;
-    setHidden(errorBox, false);
-  }
-
-  async function processImage(file) {
-    if (!file || !file.type.startsWith('image/')) {
-      showError('Please choose an image file.');
-      return;
-    }
-
-    resetUrls();
-    setHidden(errorBox, true);
-    setHidden(workspace, false);
-    setHidden(processing, false);
-    setHidden(resultPreview, true);
-    setHidden(actions, true);
-
-    originalUrl = URL.createObjectURL(file);
-    originalPreview.src = originalUrl;
-    workspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-    const form = new FormData();
-    form.append('image', file, file.name || 'pasted-image.png');
-
-    try {
-      const response = await fetch('/api/remove', { method: 'POST', body: form });
-      if (!response.ok) {
-        let message = 'Unable to remove the background.';
-        try {
-          const data = await response.json();
-          if (data.error) message = data.error;
-        } catch (_) {}
-        throw new Error(message);
-      }
-
-      resultBlob = await response.blob();
-      resultUrl = URL.createObjectURL(resultBlob);
-      resultPreview.src = resultUrl;
-      setHidden(processing, true);
-      setHidden(resultPreview, false);
-      setHidden(actions, false);
-    } catch (err) {
-      setHidden(processing, true);
-      showError(err.message || 'Something went wrong.');
-    }
-  }
-
-  uploadBtn.addEventListener('click', () => fileInput.click());
-  dropZone.addEventListener('click', (event) => {
-    if (event.target !== uploadBtn) fileInput.click();
-  });
-  dropZone.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' || event.key === ' ') fileInput.click();
-  });
-  fileInput.addEventListener('change', () => {
-    if (fileInput.files?.[0]) processImage(fileInput.files[0]);
-  });
-
-  ['dragenter', 'dragover'].forEach(type => {
-    dropZone.addEventListener(type, event => {
-      event.preventDefault();
-      dropZone.classList.add('dragging');
-    });
-  });
-  ['dragleave', 'drop'].forEach(type => {
-    dropZone.addEventListener(type, event => {
-      event.preventDefault();
-      dropZone.classList.remove('dragging');
-    });
-  });
-  dropZone.addEventListener('drop', event => {
-    const file = [...event.dataTransfer.files].find(f => f.type.startsWith('image/'));
-    if (file) processImage(file);
-  });
-
-  window.addEventListener('paste', event => {
-    const item = [...(event.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
-    const file = item?.getAsFile();
-    if (file) {
-      event.preventDefault();
-      processImage(file);
-    }
-  });
-
-  downloadBtn.addEventListener('click', () => {
-    if (!resultUrl) return;
-    const a = document.createElement('a');
-    a.href = resultUrl;
-    a.download = 'removed-background.png';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  });
-
-  copyBtn.addEventListener('click', async () => {
-    if (!resultBlob) return;
-    const oldText = copyBtn.textContent;
-    try {
-      await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': resultBlob })
-      ]);
-      copyBtn.textContent = 'Copied ✓';
-    } catch (_) {
-      copyBtn.textContent = 'Copy not supported';
-    }
-    setTimeout(() => copyBtn.textContent = oldText, 1800);
-  });
-
-  newBtn.addEventListener('click', () => {
-    resetUrls();
-    fileInput.value = '';
-    originalPreview.removeAttribute('src');
-    resultPreview.removeAttribute('src');
-    setHidden(workspace, true);
-    setHidden(errorBox, true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
-})();
-</script>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
 </body>
 </html>
