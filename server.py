@@ -10,7 +10,7 @@ from urllib.parse import urljoin, urlparse
 
 import numpy as np
 import requests
-from flask import Flask, Response, jsonify, request, send_file, send_from_directory
+from flask import Flask, Response, jsonify, request, send_file, send_from_directory, redirect
 from PIL import Image, ImageOps, UnidentifiedImageError
 from rembg import new_session, remove
 
@@ -130,8 +130,14 @@ def remove_background(raw, mode, quality):
         engine = f"Local AI · {FAST_MODEL if quality == 'fast' else HD_MODEL}"
 
     out = io.BytesIO()
-    output.save(out, "PNG", optimize=False, compress_level=1)
-    return out.getvalue(), engine, analysis
+    if isinstance(output, (bytes, bytearray)):
+        png = bytes(output)
+    else:
+        output.save(out, "PNG", optimize=False, compress_level=1)
+        png = out.getvalue()
+    with Image.open(io.BytesIO(png)) as verify:
+        verify.verify()
+    return png, engine, analysis
 
 
 def validate_url(value):
@@ -247,7 +253,8 @@ def cache_headers(resp):
 @app.get("/")
 def home(): return static("index.html")
 @app.get("/processing")
-def processing(): return static("processing.html")
+def processing():
+    return redirect("/", code=302)
 @app.get("/result")
 def result(): return static("result.html")
 @app.get("/samples")
@@ -257,7 +264,7 @@ def samples(): return static("samples.html")
 def health():
     return jsonify({
         "ok":True,
-        "engine":"railway-local-ai",
+        "engine":"railway-local-ai-v6",
         "externalPaidApi":False,
         "paidApiKeyRequired":False,
         "fastModel":FAST_MODEL,
@@ -301,7 +308,12 @@ def api_result(jid):
         if not job: return jsonify({"error":"This job expired."}),404
         if job["status"]!="done" or not job["result"]: return jsonify({"error":"Result not ready."}),409
         data=job["result"]
-    return send_file(io.BytesIO(data), mimetype="image/png", max_age=0)
+    return Response(
+        data,
+        status=200,
+        mimetype="image/png",
+        headers={"Content-Length": str(len(data)), "Cache-Control": "no-store"}
+    )
 
 @app.get("/api/jobs/<jid>/original")
 def api_original(jid):
@@ -309,7 +321,12 @@ def api_original(jid):
         job=jobs.get(jid)
         if not job: return jsonify({"error":"This job expired."}),404
         data, ctype = job["original"], job["mimetype"]
-    return send_file(io.BytesIO(data), mimetype=ctype, max_age=0)
+    return Response(
+        data,
+        status=200,
+        mimetype=ctype,
+        headers={"Content-Length": str(len(data)), "Cache-Control": "no-store"}
+    )
 
 @app.errorhandler(413)
 def too_large(_):

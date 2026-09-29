@@ -1,28 +1,16 @@
-# Free Background Remover — Railway Local AI
+# Background Remover — Production Queue v6
 
-This is the stable server-side build.
+Stable GitHub + Railway build.
 
-- No remove.bg API
-- No Leonardo API
-- No Canva API
-- No API key
-- No credits
-- No npm / Node build
-- No browser AI CDN
+- No remove.bg API, Leonardo API or Canva API
+- No API key and no credits
+- Root Dockerfile only
+- Upload / Drag & Drop / Ctrl+V / URL
+- Continuous thumbnail queue; no full-page processing screen
+- Server validates every generated PNG before marking a job complete
+- Result page loads the server PNG directly, then keeps browser history locally
+- Smart / Graphic / Portrait
+- HD / Fast
 
-Modes:
-- Smart: detects flat black/white graphic backgrounds and uses a fast edge-preserving transparency algorithm.
-- Graphic: forces the fast graphic algorithm.
-- Portrait: forces local AI.
-
-Quality:
-- Fast: u2netp
-- HD: birefnet-general-lite
-
-The first AI image can be slower because rembg downloads the selected model into the Railway container. After the model is cached in the running container, later images are faster.
-
-Health endpoint:
-`/health`
-
-Expected:
-`{"ok":true,"engine":"railway-local-ai","externalPaidApi":false,"paidApiKeyRequired":false}`
+Railway should auto-detect the root Dockerfile.
+Health: /health
