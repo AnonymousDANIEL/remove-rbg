@@ -22,12 +22,24 @@ def validate_remote_url(value: str) -> str:
     if host in {"localhost", "localhost.localdomain"}:
         raise ValueError("This URL is not allowed.")
     try:
-        infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+        infos = socket.getaddrinfo(
+            host,
+            parsed.port or (443 if parsed.scheme == "https" else 80),
+            type=socket.SOCK_STREAM,
+        )
     except socket.gaierror as exc:
         raise ValueError("The image host could not be resolved.") from exc
+
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
             raise ValueError("This URL is not allowed.")
     return url
 
@@ -38,15 +50,24 @@ def fetch_image(url: str):
         "User-Agent": "Mozilla/5.0 FreeBackgroundRemover/1.0",
         "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
     }
+
     for _ in range(4):
-        with requests.get(current, headers=headers, stream=True, timeout=PROXY_TIMEOUT, allow_redirects=False) as resp:
+        with requests.get(
+            current,
+            headers=headers,
+            stream=True,
+            timeout=PROXY_TIMEOUT,
+            allow_redirects=False,
+        ) as resp:
             if 300 <= resp.status_code < 400 and resp.headers.get("Location"):
                 current = validate_remote_url(urljoin(current, resp.headers["Location"]))
                 continue
+
             resp.raise_for_status()
             ctype = (resp.headers.get("Content-Type") or "").lower()
             if ctype and not ctype.startswith("image/"):
                 raise ValueError("The URL does not point to an image.")
+
             limit = MAX_PROXY_MB * 1024 * 1024
             chunks, size = [], 0
             for chunk in resp.iter_content(128 * 1024):
@@ -57,15 +78,17 @@ def fetch_image(url: str):
                     raise ValueError(f"Image is larger than {MAX_PROXY_MB} MB.")
                 chunks.append(chunk)
             return b"".join(chunks), ctype or "application/octet-stream"
+
     raise ValueError("Too many redirects.")
 
 
 @app.after_request
-def security_headers(resp):
-    # IMG.LY recommends cross-origin isolation for SharedArrayBuffer / faster WASM threading.
-    resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
-    resp.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
-    resp.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+def cache_headers(resp):
+    # Do not force COEP/COOP here: this build loads its free AI runtime/model
+    # from cross-origin public CDNs. Keeping the page non-isolated prevents the
+    # browser from blocking those resources. No paid API is used.
+    if request.path.endswith((".js", ".css", ".html")) or request.path in {"/", "/processing", "/result", "/samples"}:
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return resp
 
 
@@ -102,7 +125,12 @@ def proxy_image():
 
 @app.get("/health")
 def health():
-    return jsonify({"ok": True, "engine": "browser-local", "externalPaidApi": False})
+    return jsonify({
+        "ok": True,
+        "engine": "browser-local",
+        "externalPaidApi": False,
+        "uiScripts": "lazy-ai-v2",
+    })
 
 
 @app.get("/<path:path>")
