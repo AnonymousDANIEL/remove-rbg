@@ -1,1 +1,21 @@
-import{$,initCommon,submitUrl,toast}from'./common.js';window.addEventListener('DOMContentLoaded',()=>{initCommon();const xs=[['Portrait','https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=1000&q=88'],['Dog','https://images.unsplash.com/photo-1552053831-71594a27632d?w=1000&q=88'],['Car','https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=1000&q=88'],['Shoe','https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000&q=88']];const g=$('#sampleGrid');for(const[n,u]of xs){const b=document.createElement('button');b.className='sample-card';b.innerHTML=`<img src="${u}" alt="${n}"><span><strong>${n}</strong><em>Use sample</em></span>`;b.onclick=async()=>{try{await submitUrl(u);}catch(e){toast(e.message);}};g.appendChild(b);}});
+import{$,initCommon,submitUrl,toast}from'./common.js';
+window.addEventListener('DOMContentLoaded',()=>{
+  initCommon();
+  const xs=[
+    ['Portrait','https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=1000&q=88'],
+    ['Dog','https://images.unsplash.com/photo-1552053831-71594a27632d?w=1000&q=88'],
+    ['Car','https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=1000&q=88'],
+    ['Shoe','https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000&q=88']
+  ];
+  const g=$('#sampleGrid');
+  for(const[n,u]of xs){
+    const b=document.createElement('button');
+    b.className='sample-card';
+    b.innerHTML=`<img src="${u}" alt="${n}"><span><strong>${n}</strong><em>Use sample</em></span>`;
+    b.onclick=async()=>{
+      try{await submitUrl(u);toast('Added to queue');}
+      catch(e){toast(e.message);}
+    };
+    g.appendChild(b);
+  }
+});

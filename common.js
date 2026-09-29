@@ -14,7 +14,7 @@ function openDb(){
 }
 export async function put(x){const db=await openDb();return new Promise((res,rej)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).put(x);t.oncomplete=res;t.onerror=()=>rej(t.error);});}
 export async function get(id){if(!id)return null;const db=await openDb();return new Promise((res,rej)=>{const q=db.transaction(STORE).objectStore(STORE).get(id);q.onsuccess=()=>res(q.result||null);q.onerror=()=>rej(q.error);});}
-export async function all(){const db=await openDb();return new Promise((res,rej)=>{const q=db.transaction(STORE).objectStore(STORE).getAll();q.onsuccess=()=>res(q.result.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)));q.onerror=()=>rej(q.error);});}
+export async function all(){const db=await openDb();return new Promise((res,rej)=>{const q=db.transaction(STORE).objectStore(STORE).getAll();q.onsuccess=()=>res(q.result.map(x=>{if(!x.kind&&x.resultBlob)x.kind='result';return x;}).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)));q.onerror=()=>rej(q.error);});}
 export async function del(id){const db=await openDb();return new Promise((res,rej)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).delete(id);t.oncomplete=res;t.onerror=()=>rej(t.error);});}
 export async function clearHistory(){const xs=await all();for(const x of xs)await del(x.id);}
 
