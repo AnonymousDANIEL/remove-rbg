@@ -1,92 +1,79 @@
-# Remove BG — Official remove.bg API
+# FREE SMART Background Remover — GitHub + Railway
 
-This build does **not** use rembg, U2Net or BiRefNet. The cutout result comes from the official remove.bg Background Removal API.
+This version intentionally uses **no paid background-removal API**.
 
-## Required Railway variable
+- No `REMOVE_BG_API_KEY`
+- No remove.bg credits
+- No Leonardo API
+- No Canva API
+- No pay-per-image charge
 
-Railway → your service → **Variables**:
+Railway only hosts the website and a small image-URL proxy. Background removal runs **inside the user's browser**. There is no paid AI endpoint.
 
-```text
-REMOVE_BG_API_KEY=YOUR_REMOVE_BG_API_KEY
-```
+## Engines
 
-Do not put the API key in GitHub.
+### Smart (recommended)
+Smart first examines the image border.
 
-## Flow
+- If the border is a nearly solid black/white background, it uses the built-in **Smart Graphic** alpha algorithm. This is useful for amount artwork, glowing text, logos, title graphics, and black-background graphics because it preserves coloured outlines/glow instead of asking a portrait segmentation model to guess.
+- Otherwise it uses local ISNet AI in the browser.
 
-- `/` Upload / Drag & Drop / Ctrl+V / URL
-- `/processing` separate processing screen
-- `/result` Removed / Original / Compare / Copy / Download
-- Previous records are stored in the current browser with IndexedDB
-- Ctrl+V also works on Processing and Result pages
+### Graphic
+Always uses the Smart Graphic solid-background removal algorithm. Very fast. Best when the background is black, white, or another mostly flat colour.
 
-## Quality modes
+### Portrait
+Always uses the local AI model.
 
-### Best — default
+## Quality
 
-Sends:
+- **HD**: uses the large local model when WebGPU is available; on CPU it automatically uses the medium model so the browser does not become unusably slow.
+- **Fast**: uses the quantized small model.
 
-```text
-size=auto
-type=auto (unless you choose a subject)
-type_level=2
-format=png
-```
-
-`size=auto` asks remove.bg for the highest available output up to the API's normal auto limit, based on input size and account credits.
-
-### Free Preview
-
-Sends:
-
-```text
-size=preview
-```
-
-remove.bg currently advertises 50 free low-resolution API calls per month. Use this mode when you want to test without intentionally requesting high-resolution output.
-
-## Graphic mode
-
-For glowing amount images, title cards, logos and graphics such as `RM1,475`, choose **Graphic** before Upload/Paste. This sends:
-
-```text
-type=graphic
-```
-
-For normal photos leave Subject on **Auto**, which remove.bg recommends.
-
-## Official API limits used by this build
-
-- JPG / PNG / WebP
-- up to 22 MB per uploaded file
-- input resolution up to 50 MP
-- transparent PNG output
-
-## Optional Railway variables
-
-```text
-JOB_WORKERS=4
-JOB_TTL_SECONDS=1800
-API_TIMEOUT_SECONDS=90
-MAX_UPLOAD_MB=22
-```
+The first AI use downloads the model/WASM files. The browser then caches them, so later images are faster. The home page starts warming the selected model quietly in the background.
 
 ## Deploy
 
-1. Extract the ZIP.
-2. Delete the old files in your GitHub repo.
-3. Upload **all extracted files** to the repository root.
-4. Commit changes.
-5. Railway automatically redeploys.
-6. Add `REMOVE_BG_API_KEY` in Railway Variables.
-7. Open `/health`. It should show `"apiConfigured": true`.
+1. Extract this ZIP.
+2. Delete the old files in your GitHub repository.
+3. Upload all extracted files to the repository root.
+4. Commit.
+5. Railway automatically rebuilds using the included Dockerfile.
+6. Delete the old `REMOVE_BG_API_KEY` Railway variable. It is not used.
 
-## Important: December 1, 2026
+No Railway variables are required.
 
-remove.bg currently states that its Background Removal API moves to Leonardo.Ai starting **December 1, 2026**. This package intentionally uses the current official endpoint:
+Health check:
 
-```text
-https://api.remove.bg/v1.0/removebg
+`/health`
+
+returns:
+
+```json
+{"ok": true, "engine": "browser-local", "externalPaidApi": false}
 ```
 
-If the old endpoint is retired on/after that date, the backend will need the Leonardo migration update.
+## Pages
+
+- `/` — Upload / Drop / Paste / URL
+- `/processing` — separate processing page
+- `/result` — Removed / Original / Compare / Copy / Download / Previous records
+- `/samples` — sample images
+
+Ctrl+V works on every page.
+
+## Performance notes
+
+For best browser AI performance, the Flask server sets the cross-origin isolation headers recommended by IMG.LY for SharedArrayBuffer/WASM threading. On supported browsers, WebGPU is used. If WebGPU is unavailable, the library falls back to CPU/WASM.
+
+## Important accuracy note
+
+A free local model cannot be guaranteed to produce pixel-identical output to remove.bg's proprietary commercial model. This build improves the common black-background graphic case by using a dedicated graphic algorithm instead of forcing every image through the same segmentation model.
+
+## Open-source license note
+
+This project uses `@imgly/background-removal`, which is distributed under the AGPL license. If you publicly deploy or modify an AGPL-covered application, review and comply with the AGPL source-sharing requirements. The package and model runtime assets are provided by IMG.LY; their own license/notice files govern those components.
+
+
+## First-use model download
+
+The browser library and neural-network assets are downloaded from the public IMG.LY/ESM distribution endpoints on first use. This is **not a paid API call** and there is no per-image credit. Browser caching makes later runs faster.

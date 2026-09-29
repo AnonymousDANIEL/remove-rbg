@@ -1,1 +1,50 @@
-window.addEventListener('DOMContentLoaded',()=>{const fileInput=Core.$('#fileInput'),uploadBtn=Core.$('#uploadBtn'),dropZone=Core.$('#dropZone'),pasteBtn=Core.$('#pasteBtn'),urlBtn=Core.$('#urlBtn'),urlModal=Core.$('#urlModal'),urlInput=Core.$('#urlInput'),urlGo=Core.$('#urlGo');uploadBtn.addEventListener('click',()=>fileInput.click());fileInput.addEventListener('change',async e=>{const f=e.target.files?.[0];e.target.value='';if(!f)return;try{await Core.submitFile(f)}catch(err){Core.toast(err.message)}});['dragenter','dragover'].forEach(t=>dropZone.addEventListener(t,e=>{e.preventDefault();dropZone.classList.add('dragging')}));['dragleave','drop'].forEach(t=>dropZone.addEventListener(t,e=>{e.preventDefault();dropZone.classList.remove('dragging')}));dropZone.addEventListener('drop',async e=>{const f=[...(e.dataTransfer?.files||[])].find(x=>x.type?.startsWith('image/'));if(!f)return Core.toast('Drop a JPG, PNG or WebP image.');try{await Core.submitFile(f)}catch(err){Core.toast(err.message)}});pasteBtn.addEventListener('click',async()=>{try{const p=await Core.readClipboard();if(p.file)await Core.submitFile(p.file);else await Core.submitUrl(p.url)}catch(err){Core.toast(err.message)}});const close=()=>urlModal.classList.add('hidden');urlBtn.addEventListener('click',()=>{urlModal.classList.remove('hidden');setTimeout(()=>urlInput.focus(),20)});Core.$$('[data-close-url]').forEach(el=>el.addEventListener('click',close));urlGo.addEventListener('click',async()=>{const u=urlInput.value.trim();if(!u)return Core.toast('Paste an image URL.');try{await Core.submitUrl(u)}catch(err){Core.toast(err.message)}});urlInput.addEventListener('keydown',e=>{if(e.key==='Enter')urlGo.click()})});
+import { $, $$, toast, initCommon, submitBlob, fetchRemoteImage, readClipboardImage, settings } from './common.js';
+import { preloadEngine } from './engine.js';
+
+window.addEventListener('DOMContentLoaded', () => {
+  initCommon();
+  const input = $('#fileInput');
+  const upload = $('#uploadBtn');
+  const drop = $('#dropZone');
+  const paste = $('#pasteBtn');
+  const urlBtn = $('#urlBtn');
+  const modal = $('#urlModal');
+  const urlInput = $('#urlInput');
+  const urlGo = $('#urlGo');
+
+  upload.addEventListener('click', () => input.click());
+  input.addEventListener('change', async e => {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file) return;
+    try { await submitBlob(file, file.name); } catch (err) { toast(err.message); }
+  });
+
+  ['dragenter','dragover'].forEach(type => drop.addEventListener(type, e => { e.preventDefault(); drop.classList.add('dragging'); }));
+  ['dragleave','drop'].forEach(type => drop.addEventListener(type, e => { e.preventDefault(); drop.classList.remove('dragging'); }));
+  drop.addEventListener('drop', async e => {
+    const file = [...(e.dataTransfer?.files || [])].find(f => f.type.startsWith('image/'));
+    if (!file) return toast('Drop an image file.');
+    try { await submitBlob(file, file.name); } catch (err) { toast(err.message); }
+  });
+
+  paste.addEventListener('click', async () => {
+    try {
+      const item = await readClipboardImage();
+      await submitBlob(item.blob, item.name);
+    } catch (err) { toast(err.message); }
+  });
+
+  const close = () => modal.classList.add('hidden');
+  urlBtn.addEventListener('click', () => { modal.classList.remove('hidden'); setTimeout(() => urlInput.focus(), 10); });
+  $$('[data-close-url]').forEach(el => el.addEventListener('click', close));
+  urlGo.addEventListener('click', async () => {
+    try {
+      const remote = await fetchRemoteImage(urlInput.value.trim());
+      await submitBlob(remote.blob, remote.name, urlInput.value.trim());
+    } catch (err) { toast(err.message); }
+  });
+  urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') urlGo.click(); });
+
+  // Quiet warm-up after the page is visible. It never blocks upload/paste.
+  setTimeout(() => preloadEngine(settings().quality).catch(() => {}), 700);
+});

@@ -1,0 +1,7 @@
+Third-party component notice
+
+This project uses @imgly/background-removal 1.7.0.
+The IMG.LY project states that the software is free for use under the AGPL license.
+See: https://github.com/imgly/background-removal-js
+
+This project is not affiliated with remove.bg, Canva, or Leonardo.Ai and does not call their paid background-removal APIs.
