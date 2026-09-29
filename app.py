@@ -1,192 +1,135 @@
 import io
-import ipaddress
 import os
-import socket
 import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import urljoin, urlparse
 
 import requests
 from flask import Flask, jsonify, request, send_file, send_from_directory
-from PIL import Image, ImageOps, UnidentifiedImageError
-from rembg import new_session, remove
+from requests.adapters import HTTPAdapter
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, static_folder=None)
 
-MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "25"))
-MAX_PIXELS = int(os.getenv("MAX_PIXELS", "60000000"))
-FAST_MODEL = os.getenv("FAST_MODEL", "birefnet-general-lite")
-HD_MODEL = os.getenv("HD_MODEL", "birefnet-general")
-URL_TIMEOUT = int(os.getenv("URL_TIMEOUT", "20"))
+REMOVE_BG_API_KEY = os.getenv("REMOVE_BG_API_KEY", "").strip()
+REMOVE_BG_ENDPOINT = os.getenv("REMOVE_BG_ENDPOINT", "https://api.remove.bg/v1.0/removebg").strip()
+REMOVE_BG_ACCOUNT_ENDPOINT = os.getenv("REMOVE_BG_ACCOUNT_ENDPOINT", "https://api.remove.bg/v1.0/account").strip()
+MAX_UPLOAD_MB = min(22, int(os.getenv("MAX_UPLOAD_MB", "22")))
 JOB_TTL_SECONDS = int(os.getenv("JOB_TTL_SECONDS", "1800"))
-JOB_WORKERS = max(1, int(os.getenv("JOB_WORKERS", "1")))
-WARM_MODEL = os.getenv("WARM_MODEL", "1") == "1"
+JOB_WORKERS = max(1, min(8, int(os.getenv("JOB_WORKERS", "4"))))
+API_TIMEOUT_SECONDS = int(os.getenv("API_TIMEOUT_SECONDS", "90"))
 
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
-Image.MAX_IMAGE_PIXELS = MAX_PIXELS
 
-_executor = ThreadPoolExecutor(max_workers=JOB_WORKERS, thread_name_prefix="remove-bg")
 _jobs = {}
 _jobs_lock = threading.RLock()
-_sessions = {}
-_session_locks = {"fast": threading.Lock(), "hd": threading.Lock()}
-_infer_locks = {"fast": threading.Lock(), "hd": threading.Lock()}
+_executor = ThreadPoolExecutor(max_workers=JOB_WORKERS, thread_name_prefix="remove-bg-api")
+_http = requests.Session()
+_adapter = HTTPAdapter(pool_connections=16, pool_maxsize=32, max_retries=1)
+_http.mount("https://", _adapter)
+_http.mount("http://", _adapter)
+
+ALLOWED_SIZES = {"auto", "preview"}
+ALLOWED_TYPES = {"auto", "graphic", "person", "product", "animal", "car", "transportation"}
 
 
 def static_file(name, mimetype=None):
     return send_from_directory(BASE_DIR, name, mimetype=mimetype)
 
 
-def model_for(mode: str) -> str:
-    return HD_MODEL if mode == "hd" else FAST_MODEL
+def require_api_key():
+    if not REMOVE_BG_API_KEY:
+        raise RuntimeError("REMOVE_BG_API_KEY is not configured. Add it in Railway → Variables.")
 
 
-def get_session(mode: str):
-    mode = "hd" if mode == "hd" else "fast"
-    if mode not in _sessions:
-        with _session_locks[mode]:
-            if mode not in _sessions:
-                model = model_for(mode)
-                app.logger.info("Loading rembg model: %s (%s)", model, mode)
-                _sessions[mode] = new_session(model)
-    return _sessions[mode]
+def normalize_size(value):
+    value = (value or "auto").strip().lower()
+    return value if value in ALLOWED_SIZES else "auto"
 
 
-def normalize_image(raw: bytes) -> Image.Image:
-    if not raw:
-        raise ValueError("The image is empty.")
+def normalize_type(value):
+    value = (value or "auto").strip().lower()
+    return value if value in ALLOWED_TYPES else "auto"
+
+
+def parse_api_error(resp):
     try:
-        with Image.open(io.BytesIO(raw)) as probe:
-            probe.verify()
-        with Image.open(io.BytesIO(raw)) as image:
-            image = ImageOps.exif_transpose(image)
-            if image.width * image.height > MAX_PIXELS:
-                raise ValueError(f"Image is too large. Maximum is {MAX_PIXELS:,} pixels.")
-            if image.mode not in ("RGB", "RGBA"):
-                image = image.convert("RGBA" if "transparency" in image.info else "RGB")
-            return image.copy()
-    except (UnidentifiedImageError, OSError) as exc:
-        raise ValueError("Unsupported or damaged image file.") from exc
+        payload = resp.json()
+        errors = payload.get("errors") or []
+        titles = []
+        for item in errors:
+            if isinstance(item, dict):
+                title = item.get("title") or item.get("detail") or item.get("code")
+                if title:
+                    titles.append(str(title))
+        if titles:
+            return " / ".join(titles)
+    except Exception:
+        pass
+    text = (resp.text or "").strip()
+    if text and len(text) < 500:
+        return text
+    return f"remove.bg API returned HTTP {resp.status_code}."
 
 
-def remove_background(raw: bytes, mode: str) -> bytes:
-    image = normalize_image(raw)
-    session = get_session(mode)
-    mode = "hd" if mode == "hd" else "fast"
-
-    # Do NOT binary-threshold the mask: soft alpha keeps text glow, hair and soft edges.
-    # Decontamination is useful on HD; Fast skips it for lower latency and color fidelity.
-    with _infer_locks[mode]:
-        output = remove(
-            image,
-            session=session,
-            decontaminate=(mode == "hd"),
-            post_process_mask=False,
-        )
-
-    out = io.BytesIO()
-    output.save(out, format="PNG", optimize=False, compress_level=1)
-    return out.getvalue()
-
-
-def _validate_remote_url(url: str) -> str:
-    if not isinstance(url, str) or not url.strip():
-        raise ValueError("Please enter an image URL.")
-    url = url.strip()
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise ValueError("Only http/https image URLs are supported.")
-
-    host = parsed.hostname
-    if host.lower() in {"localhost", "localhost.localdomain"}:
-        raise ValueError("This URL is not allowed.")
-
-    try:
-        infos = socket.getaddrinfo(
-            host,
-            parsed.port or (443 if parsed.scheme == "https" else 80),
-            type=socket.SOCK_STREAM,
-        )
-    except socket.gaierror as exc:
-        raise ValueError("The image host could not be resolved.") from exc
-
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_multicast
-            or ip.is_reserved
-            or ip.is_unspecified
-        ):
-            raise ValueError("This URL is not allowed.")
-    return url
-
-
-def fetch_remote_image(url: str) -> bytes:
-    current = _validate_remote_url(url)
-    headers = {
-        "User-Agent": "Mozilla/5.0 RemoveBG-SelfHosted/3.0",
-        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+def response_metadata(resp):
+    def h(name):
+        return resp.headers.get(name)
+    return {
+        "detectedType": h("X-Type"),
+        "width": int(h("X-Width")) if (h("X-Width") or "").isdigit() else None,
+        "height": int(h("X-Height")) if (h("X-Height") or "").isdigit() else None,
+        "creditsCharged": h("X-Credits-Charged"),
+        "rateLimitRemaining": h("X-RateLimit-Remaining"),
+        "rateLimitLimit": h("X-RateLimit-Limit"),
+        "rateLimitReset": h("X-RateLimit-Reset"),
     }
 
-    for _ in range(4):
-        with requests.get(
-            current,
-            headers=headers,
-            stream=True,
-            timeout=URL_TIMEOUT,
-            allow_redirects=False,
-        ) as resp:
-            if 300 <= resp.status_code < 400 and resp.headers.get("Location"):
-                current = _validate_remote_url(urljoin(current, resp.headers["Location"]))
-                continue
 
-            resp.raise_for_status()
-            ctype = (resp.headers.get("Content-Type") or "").lower()
-            if ctype and not ctype.startswith("image/"):
-                raise ValueError("The URL does not point to an image.")
+def remove_file(raw, filename, mimetype, size, subject_type):
+    require_api_key()
+    resp = _http.post(
+        REMOVE_BG_ENDPOINT,
+        headers={"X-Api-Key": REMOVE_BG_API_KEY, "Accept": "image/png"},
+        files={"image_file": (filename or "image.png", io.BytesIO(raw), mimetype or "application/octet-stream")},
+        data={"size": size, "type": subject_type, "type_level": "2", "format": "png"},
+        timeout=API_TIMEOUT_SECONDS,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(parse_api_error(resp))
+    return resp.content, response_metadata(resp)
 
-            limit = MAX_UPLOAD_MB * 1024 * 1024
-            buf = bytearray()
-            for chunk in resp.iter_content(128 * 1024):
-                if not chunk:
-                    continue
-                buf.extend(chunk)
-                if len(buf) > limit:
-                    raise ValueError(f"Image is larger than {MAX_UPLOAD_MB} MB.")
-            return bytes(buf)
 
-    raise ValueError("Too many redirects while fetching the image.")
+def remove_url(url, size, subject_type):
+    require_api_key()
+    resp = _http.post(
+        REMOVE_BG_ENDPOINT,
+        headers={"X-Api-Key": REMOVE_BG_API_KEY, "Accept": "image/png"},
+        data={"image_url": url, "size": size, "type": subject_type, "type_level": "2", "format": "png"},
+        timeout=API_TIMEOUT_SECONDS,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(parse_api_error(resp))
+    return resp.content, response_metadata(resp)
 
 
 def prune_jobs():
     cutoff = time.time() - JOB_TTL_SECONDS
     with _jobs_lock:
-        stale = [job_id for job_id, job in _jobs.items() if job["created_at"] < cutoff]
-        for job_id in stale:
+        for job_id in [k for k, v in _jobs.items() if v["createdAt"] < cutoff]:
             _jobs.pop(job_id, None)
 
 
-def create_job(raw: bytes, name: str, mode: str):
+def create_job(*, source, name, size, subject_type, raw=None, mimetype=None, url=None):
     prune_jobs()
-    mode = "hd" if mode == "hd" else "fast"
     job_id = uuid.uuid4().hex
     job = {
-        "id": job_id,
-        "name": name or "image.png",
-        "mode": mode,
-        "status": "queued",
-        "created_at": time.time(),
-        "started_at": None,
-        "finished_at": None,
-        "original": raw,
-        "result": None,
-        "error": None,
+        "id": job_id, "source": source, "name": name or "image.png",
+        "size": normalize_size(size), "subjectType": normalize_type(subject_type),
+        "createdAt": time.time(), "startedAt": None, "finishedAt": None,
+        "status": "queued", "error": None, "raw": raw, "mimetype": mimetype,
+        "url": url, "result": None, "meta": {},
     }
     with _jobs_lock:
         _jobs[job_id] = job
@@ -194,147 +137,119 @@ def create_job(raw: bytes, name: str, mode: str):
     return job
 
 
-def run_job(job_id: str):
+def run_job(job_id):
     with _jobs_lock:
         job = _jobs.get(job_id)
         if not job:
             return
         job["status"] = "processing"
-        job["started_at"] = time.time()
-        raw = job["original"]
-        mode = job["mode"]
-
+        job["startedAt"] = time.time()
+        source, raw, mimetype, url = job["source"], job["raw"], job["mimetype"], job["url"]
+        name, size, subject_type = job["name"], job["size"], job["subjectType"]
     try:
-        result = remove_background(raw, mode)
+        if source == "url":
+            result, meta = remove_url(url, size, subject_type)
+        else:
+            result, meta = remove_file(raw, name, mimetype, size, subject_type)
         with _jobs_lock:
             job = _jobs.get(job_id)
             if job:
-                job["result"] = result
-                job["status"] = "done"
-                job["finished_at"] = time.time()
+                job["result"], job["meta"], job["status"], job["finishedAt"] = result, meta, "done", time.time()
     except Exception as exc:
-        app.logger.exception("Background removal failed for job %s", job_id)
+        app.logger.exception("remove.bg job failed: %s", job_id)
         with _jobs_lock:
             job = _jobs.get(job_id)
             if job:
-                job["status"] = "error"
-                job["error"] = str(exc) or "Background removal failed."
-                job["finished_at"] = time.time()
+                job["status"], job["error"], job["finishedAt"] = "error", str(exc) or "Background removal failed.", time.time()
 
 
 def public_job(job):
     now = time.time()
-    created = job["created_at"]
-    started = job["started_at"]
-    finished = job["finished_at"]
+    started, finished = job["startedAt"], job["finishedAt"]
     return {
-        "id": job["id"],
-        "name": job["name"],
-        "mode": job["mode"],
-        "status": job["status"],
-        "error": job["error"],
-        "queuedMs": int(((started or now) - created) * 1000),
+        "id": job["id"], "source": job["source"], "name": job["name"],
+        "size": job["size"], "subjectType": job["subjectType"], "status": job["status"],
+        "error": job["error"], "originalUrl": job["url"] if job["source"] == "url" else None,
+        "queuedMs": int(((started or now) - job["createdAt"]) * 1000),
         "processingMs": int((((finished or now) - started) if started else 0) * 1000),
+        **(job.get("meta") or {}),
     }
 
 
 @app.get("/")
-def home_page():
-    return static_file("index.html")
-
-
+def home(): return static_file("index.html")
 @app.get("/processing")
-def processing_page():
-    return static_file("processing.html")
-
-
+def processing_page(): return static_file("processing.html")
 @app.get("/result")
-def result_page():
-    return static_file("result.html")
-
-
+def result_page(): return static_file("result.html")
 @app.get("/samples")
-def samples_page():
-    return static_file("samples.html")
-
-
+def samples_page(): return static_file("samples.html")
 @app.get("/style.css")
-def styles():
-    return static_file("style.css", "text/css")
-
-
+def style(): return static_file("style.css", "text/css")
 @app.get("/common.js")
-def common_script():
-    return static_file("common.js", "application/javascript")
-
-
+def common(): return static_file("common.js", "application/javascript")
 @app.get("/home.js")
-def home_script():
-    return static_file("home.js", "application/javascript")
-
-
+def home_js(): return static_file("home.js", "application/javascript")
 @app.get("/processing.js")
-def processing_script():
-    return static_file("processing.js", "application/javascript")
-
-
+def processing_js(): return static_file("processing.js", "application/javascript")
 @app.get("/result.js")
-def result_script():
-    return static_file("result.js", "application/javascript")
-
-
+def result_js(): return static_file("result.js", "application/javascript")
 @app.get("/samples.js")
-def samples_script():
-    return static_file("samples.js", "application/javascript")
+def samples_js(): return static_file("samples.js", "application/javascript")
 
 
 @app.get("/health")
 def health():
-    return jsonify(
-        {
-            "ok": True,
-            "fastModel": FAST_MODEL,
-            "fastReady": "fast" in _sessions,
-            "hdModel": HD_MODEL,
-            "hdReady": "hd" in _sessions,
-        }
-    )
+    return jsonify({"ok": True, "provider": "remove.bg", "apiConfigured": bool(REMOVE_BG_API_KEY)})
+
+
+@app.get("/api/account")
+def api_account():
+    if not REMOVE_BG_API_KEY:
+        return jsonify({"configured": False, "error": "API key not configured."}), 503
+    try:
+        resp = _http.get(REMOVE_BG_ACCOUNT_ENDPOINT, headers={"X-Api-Key": REMOVE_BG_API_KEY}, timeout=20)
+        if resp.status_code != 200:
+            return jsonify({"error": parse_api_error(resp)}), resp.status_code
+        attrs = ((resp.json().get("data") or {}).get("attributes") or {})
+        return jsonify({"configured": True, "credits": attrs.get("credits") or {}, "freeCalls": (attrs.get("api") or {}).get("free_calls")})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
 
 
 @app.post("/api/jobs")
-def api_create_job():
+def api_create_file_job():
+    if not REMOVE_BG_API_KEY:
+        return jsonify({"error": "REMOVE_BG_API_KEY is missing. Add it in Railway → Variables."}), 503
     uploaded = request.files.get("image")
     if uploaded is None:
         return jsonify({"error": "Please upload or paste an image."}), 400
-
-    mode = request.form.get("mode", "fast")
     raw = uploaded.read()
     if not raw:
         return jsonify({"error": "The uploaded image is empty."}), 400
-
-    name = uploaded.filename or "pasted-image.png"
-    job = create_job(raw, name, mode)
+    job = create_job(
+        source="file", name=uploaded.filename or "pasted-image.png", raw=raw,
+        mimetype=uploaded.mimetype or "application/octet-stream",
+        size=request.form.get("size", "auto"), subject_type=request.form.get("type", "auto"),
+    )
     return jsonify(public_job(job)), 202
 
 
 @app.post("/api/jobs-url")
 def api_create_url_job():
+    if not REMOVE_BG_API_KEY:
+        return jsonify({"error": "REMOVE_BG_API_KEY is missing. Add it in Railway → Variables."}), 503
     payload = request.get_json(silent=True) or {}
-    mode = payload.get("mode", "fast")
-    try:
-        raw = fetch_remote_image(payload.get("url", ""))
-        parsed = urlparse(payload.get("url", ""))
-        name = os.path.basename(parsed.path) or "url-image.jpg"
-        job = create_job(raw, name, mode)
-        return jsonify(public_job(job)), 202
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    except requests.RequestException:
-        return jsonify({"error": "Could not download that image URL."}), 400
+    url = (payload.get("url") or "").strip()
+    if not (url.startswith("http://") or url.startswith("https://")):
+        return jsonify({"error": "Please enter a valid http/https image URL."}), 400
+    name = (url.split("?")[0].rstrip("/").split("/")[-1] or "url-image.jpg")[:180]
+    job = create_job(source="url", name=name, url=url, size=payload.get("size", "auto"), subject_type=payload.get("type", "auto"))
+    return jsonify(public_job(job)), 202
 
 
 @app.get("/api/jobs/<job_id>")
-def api_job_status(job_id):
+def api_job(job_id):
     prune_jobs()
     with _jobs_lock:
         job = _jobs.get(job_id)
@@ -352,14 +267,7 @@ def api_job_result(job_id):
         if job["status"] != "done" or not job["result"]:
             return jsonify({"error": "Result is not ready yet."}), 409
         result = job["result"]
-
-    return send_file(
-        io.BytesIO(result),
-        mimetype="image/png",
-        as_attachment=False,
-        download_name="removed-background.png",
-        max_age=0,
-    )
+    return send_file(io.BytesIO(result), mimetype="image/png", as_attachment=False, download_name="removed-background.png", max_age=0)
 
 
 @app.get("/api/jobs/<job_id>/original")
@@ -368,29 +276,16 @@ def api_job_original(job_id):
         job = _jobs.get(job_id)
         if not job:
             return jsonify({"error": "This processing job has expired."}), 404
-        raw = job["original"]
-
-    # Let the browser sniff common image formats; this endpoint is only for the user's own upload.
-    return send_file(io.BytesIO(raw), mimetype="application/octet-stream", max_age=0)
+        if job["source"] != "file":
+            return jsonify({"error": "Original is a remote URL."}), 400
+        raw, mimetype = job["raw"], job["mimetype"] or "application/octet-stream"
+    return send_file(io.BytesIO(raw), mimetype=mimetype, max_age=0)
 
 
 @app.errorhandler(413)
 def too_large(_):
-    return jsonify({"error": f"Image is too large. Maximum upload is {MAX_UPLOAD_MB} MB."}), 413
-
-
-def warm_fast_model():
-    try:
-        get_session("fast")
-        app.logger.info("Fast model is ready")
-    except Exception:
-        app.logger.exception("Fast model warm-up failed; first job will retry")
-
-
-if WARM_MODEL:
-    threading.Thread(target=warm_fast_model, daemon=True, name="model-warmup").start()
+    return jsonify({"error": f"Image is too large. remove.bg API supports files up to {MAX_UPLOAD_MB} MB."}), 413
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "8080"))
-    app.run(host="0.0.0.0", port=port, threaded=True)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "8080")), threaded=True)
