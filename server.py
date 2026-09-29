@@ -4,13 +4,14 @@ import socket
 from urllib.parse import urljoin, urlparse
 
 import requests
-from flask import Flask, Response, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, static_folder=None)
 
 MAX_PROXY_MB = int(os.getenv("MAX_PROXY_MB", "20"))
-PROXY_TIMEOUT = int(os.getenv("PROXY_TIMEOUT", "20"))
+PROXY_TIMEOUT = int(os.getenv("PROXY_TIMEOUT", "30"))
+IMGLY_BASE = "https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/"
 
 
 def validate_remote_url(value: str) -> str:
@@ -83,11 +84,16 @@ def fetch_image(url: str):
 
 
 @app.after_request
-def cache_headers(resp):
-    # Do not force COEP/COOP here: this build loads its free AI runtime/model
-    # from cross-origin public CDNs. Keeping the page non-isolated prevents the
-    # browser from blocking those resources. No paid API is used.
-    if request.path.endswith((".js", ".css", ".html")) or request.path in {"/", "/processing", "/result", "/samples"}:
+def headers(resp):
+    # All AI JavaScript is bundled into this Railway deployment.
+    # Model/WASM resources are proxied through the same origin below.
+    resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    resp.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+    resp.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+
+    if request.path.startswith("/dist/"):
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif request.path.endswith((".css", ".html")) or request.path in {"/", "/processing", "/result", "/samples"}:
         resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return resp
 
@@ -123,13 +129,54 @@ def proxy_image():
         return jsonify({"error": "Could not download that image URL."}), 400
 
 
+@app.get("/imgly-assets/<path:asset_path>")
+def imgly_assets(asset_path):
+    # Proxy the free model/WASM asset CDN through Railway so the browser only
+    # talks to this same origin. The browser can cache immutable model chunks.
+    if ".." in asset_path or asset_path.startswith("/"):
+        return jsonify({"error": "Invalid asset path."}), 400
+
+    upstream_url = IMGLY_BASE + asset_path
+    try:
+        upstream = requests.get(
+            upstream_url,
+            stream=True,
+            timeout=60,
+            headers={"User-Agent": "Mozilla/5.0 FreeBackgroundRemover/2.0"},
+        )
+        if upstream.status_code != 200:
+            status = upstream.status_code
+            upstream.close()
+            return jsonify({"error": f"AI asset unavailable ({status})."}), 502
+
+        content_type = upstream.headers.get("Content-Type") or "application/octet-stream"
+        content_length = upstream.headers.get("Content-Length")
+
+        def generate():
+            try:
+                for chunk in upstream.iter_content(256 * 1024):
+                    if chunk:
+                        yield chunk
+            finally:
+                upstream.close()
+
+        response = Response(stream_with_context(generate()), mimetype=content_type)
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        if content_length:
+            response.headers["Content-Length"] = content_length
+        return response
+    except requests.RequestException:
+        return jsonify({"error": "Could not load the free local AI model asset."}), 502
+
+
 @app.get("/health")
 def health():
     return jsonify({
         "ok": True,
-        "engine": "browser-local",
+        "engine": "browser-local-bundled",
         "externalPaidApi": False,
-        "uiScripts": "lazy-ai-v2",
+        "paidApiKeyRequired": False,
+        "uiScripts": "bundled-v3",
     })
 
 

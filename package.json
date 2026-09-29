@@ -1,0 +1,14 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild home.js processing.js result.js samples.js --bundle --format=esm --splitting --outdir=dist --platform=browser --target=es2022 --chunk-names=chunks/[name]-[hash]"
+  },
+  "dependencies": {
+    "@imgly/background-removal": "1.7.0",
+    "onnxruntime-web": "1.21.0-dev.20250206-d981b153d3"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10"
+  }
+}

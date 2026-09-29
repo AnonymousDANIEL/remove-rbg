@@ -1,27 +1,6 @@
-const MODULE_URL = 'https://esm.sh/@imgly/background-removal@1.7.0?bundle';
-const PUBLIC_PATH = 'https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/';
+import removeBackground from '@imgly/background-removal';
 
-let imglyPromise = null;
-
-async function loadImgly() {
-  if (!imglyPromise) {
-    imglyPromise = import(MODULE_URL)
-      .then(mod => {
-        const removeBackground = mod.default;
-        const preload = mod.preload;
-        if (typeof removeBackground !== 'function') {
-          throw new Error('Local AI module loaded incorrectly.');
-        }
-        return { removeBackground, preload };
-      })
-      .catch(err => {
-        imglyPromise = null;
-        console.error('IMG.LY local AI failed to load:', err);
-        throw new Error('Local AI could not load. Check internet/CDN access, then try again.');
-      });
-  }
-  return imglyPromise;
-}
+const MODEL_PATH = `${location.origin}/imgly-assets/`;
 
 function modelFor(quality) {
   if (quality === 'fast') return 'small';
@@ -30,20 +9,13 @@ function modelFor(quality) {
 
 function configFor(quality, progress) {
   return {
-    publicPath: PUBLIC_PATH,
+    publicPath: MODEL_PATH,
     device: navigator.gpu ? 'gpu' : 'cpu',
-    // Keep inference on the main page for broad browser/CDN compatibility.
-    // The processing page is separate, so a brief compute stutter will not block the upload page.
-    proxyToWorker: false,
+    proxyToWorker: Boolean(navigator.gpu),
     model: modelFor(quality),
     output: { format: 'image/png', quality: 1 },
     progress,
   };
-}
-
-export async function preloadEngine(quality = 'hd') {
-  const { preload } = await loadImgly();
-  if (typeof preload === 'function') return preload(configFor(quality));
 }
 
 async function bitmapFromBlob(blob) {
@@ -75,6 +47,7 @@ async function analyzeBorder(blob) {
   const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
   const w = Math.max(2, Math.round(bitmap.width * scale));
   const h = Math.max(2, Math.round(bitmap.height * scale));
+
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
@@ -94,8 +67,8 @@ async function analyzeBorder(blob) {
 
   const stepX = Math.max(1, Math.floor(w / 60));
   const stepY = Math.max(1, Math.floor(h / 60));
-  for (let x = 0; x < w; x += stepX) { push(x, 0); push(x, h-1); }
-  for (let y = 0; y < h; y += stepY) { push(0, y); push(w-1, y); }
+  for (let x = 0; x < w; x += stepX) { push(x, 0); push(x, h - 1); }
+  for (let y = 0; y < h; y += stepY) { push(0, y); push(w - 1, y); }
 
   const bg = [median(rs), median(gs), median(bs)];
   let mean = 0;
@@ -176,9 +149,6 @@ export async function processImage(blob, { mode = 'smart', quality = 'hd', progr
   }
 
   progress?.('fetch:model', 0, 1);
-  const { removeBackground } = await loadImgly();
-  progress?.('fetch:model', 1, 1);
-
   const result = await removeBackground(blob, configFor(quality, progress));
   return {
     blob: result,
