@@ -4,5 +4,5 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY server.py index.html processing.html result.html samples.html README.md LICENSE-NOTICE.txt ./
-COPY src ./src
+COPY common.js engine.js home.js processing.js result.js samples.js style.css ./
 CMD ["sh","-c","gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 2 --threads 4 --timeout 120 --keep-alive 10 --access-logfile - --error-logfile - server:app"]
